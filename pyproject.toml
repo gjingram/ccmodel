@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "ccmodel"
+version = "0.1.0"
+description = "Python libclang-powered C/C++ code modeling"
+authors = ["Gabe Ingram <gabriel.ingram@colorado.edu>"]
+license = "BSD 3-Clause"
+maintainers = ["Gabe Ingram <gabriel.ingram@colorado.edu>"]
+readme = "README.md"
+homepage = ""
+repository = "https://github.com/gjingram/ccmodel"
+documentation = ""
+keywords = [
+    "c",
+    "cc",
+    "c++",
+    "parse",
+    "code model"
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+clang = "^11.0"
+loguru = "^0.5.3"
+graphlib-backport = "^1.0.3"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.2"
+trashy-poetry = "^1.0.3"
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
