@@ -1,10 +1,14 @@
 from clang import cindex, enumerations
 import typing
+import regex
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
+import pdb
+
+re_param = regex.compile('(?:\[(?P<default>.*)\])')
 
 @cmm.default_code_model(cindex.CursorKind.TEMPLATE_TEMPLATE_PARAMETER)
 @cmm.default_code_model(cindex.CursorKind.TEMPLATE_TYPE_PARAMETER)
@@ -26,15 +30,21 @@ class TemplateParamObject(ParseObject):
         self.is_template_template_param = False
         self.template_ref = None
 
-        self.original_cpp_object = True
+        self.param = None
 
+        self.original_cpp_object = True
         if self.param_type == cindex.CursorKind.TEMPLATE_TEMPLATE_PARAMETER:
             self.is_template_template_param = True
+            self.type = "~" if node.spelling == "" else node.spelling
+            self.param = "~"
         elif self.param_type == cindex.CursorKind.TEMPLATE_TYPE_PARAMETER:
             self.is_type_param = True
+            self.type = "~" if node.spelling == node.type.spelling else node.type.spelling
+            self.param = "~"
         elif self.param_type == cindex.CursorKind.TEMPLATE_NON_TYPE_PARAMETER:
             self.is_non_type_param = True
-            self.type = node.spelling
+            self.type = node.type.spelling
+            self.param = "~"
 
         return
 
@@ -43,11 +53,14 @@ class TemplateParamObject(ParseObject):
         return self
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TemplateParamObject':
         if self.is_template_template_param:
             for child in self.children(node, cindex.CursorKind.TEMPLATE_REF):
                 self.default_value = self.header.header_get_usr(child.get_usr())
+        if self._is_variadic:
+            self.param += "..."
+        if self.default_value is not None:
+            self.param = "[{}]".format(str(self.default_value))
         return ParseObject.handle(self, node)
 
     def set_template(self, template: 'TemplateObject') -> 'TemplateParamObject':

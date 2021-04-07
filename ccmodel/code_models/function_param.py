@@ -2,10 +2,10 @@ from clang import cindex, enumerations
 import typing
 import pdb
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
 
-import illuminate.rules.code_model_map as cmm
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.PARM_DECL)
@@ -29,7 +29,6 @@ class FunctionParamObject(ParseObject):
         return self
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'FunctionParamObject':
         return ParseObject.handle(self, node)
 

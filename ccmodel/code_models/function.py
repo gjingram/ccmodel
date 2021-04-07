@@ -1,10 +1,10 @@
 from clang import cindex, enumerations
 import typing
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-from illuminate.code_models.function_param import FunctionParamObject
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from .function_param import FunctionParamObject
+from ..rules import code_model_map as cmm
 
 @cmm.default_code_model(cindex.CursorKind.FUNCTION_DECL)
 class FunctionObject(ParseObject):
@@ -53,7 +53,15 @@ class FunctionObject(ParseObject):
     @append_cpo
     def handle(self, node: cindex.Cursor) -> 'FunctionObject':
 
-        ParseObject.handle(self, node)
+        self.header.register_object(self)
+        if not self.is_definition:
+            self.definition = self.header.get_usr(node.referenced.get_usr())
+
+        types = []
+        for child in self.children(node, cindex.CursorKind.PARM_DECL):
+            types.append(child.type.spelling)
+        old_qual_id = self.qualified_id
+        self.qualified_id += f"({','.join(types)})"
 
         for child in node.get_children():
 
@@ -85,6 +93,8 @@ class FunctionObject(ParseObject):
 
         if not self._is_member and not self._is_template:
             self.header.header_add_function(self)
+
+        self.qualified_id = old_qual_id
 
         return self
 

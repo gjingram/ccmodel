@@ -2,10 +2,10 @@ from clang import cindex, enumerations
 import typing
 import pdb
 
-from illuminate.code_models.decorators import (if_handle, 
+from .decorators import (if_handle, 
         append_cpo)
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.ENUM_CONSTANT_DECL)
@@ -19,7 +19,6 @@ class EnumConstDeclObject(ParseObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'EnumConstDeclObject':
         return ParseObject.handle(self, node)
 
@@ -38,7 +37,6 @@ class EnumObject(ParseObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'EnumObject':
 
         ParseObject.handle(self, node)

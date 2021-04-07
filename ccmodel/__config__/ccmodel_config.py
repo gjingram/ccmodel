@@ -15,15 +15,15 @@ def log_object_dependencies(record):
 def ccmodel_stage_log(record):
     return record["extra"]["stage_log"]
 
-ccmodel_stage_fmt = "Illuminate: {message}"
-ccmodel_common_fmt = "Illuminate: {extra[project]}:{extra[package]}:{extra[header]} -- {message}"
+ccmodel_stage_fmt = "ccmodel: {message}"
+ccmodel_common_fmt = "ccmodel: {extra[header]} -- {message}"
 
 class IndentingParseFormatter(object):
 
     def __init__(self):
         self.n_spaces = 3
         self.indent_level = 0
-        self.fmt = "Illuminate: {extra[header]} -- " + "{extra[indent]}++{message}\n"
+        self.fmt = "ccmodel: {extra[header]} -- " + "{extra[indent]}-{message}\n"
         return
 
     def format(self, record):
@@ -39,21 +39,18 @@ ccmodel_log_config = {
             {"sink": sys.stdout, "format": indenting_formatter.format, "filter": log_object_dependencies},
             ],
         "extra": {
-            "project": "",
-            "package": "",
             "header": "",
             "indent": "",
             "log_parsed": False,
             "logs_parses": False,
             "log_object_deps": False,
             "logs_object_deps": False,
-            "log_module_deps": False,
-            "logs_module_deps": False,
-            "log_package_deps": False,
-            "logs_package_deps": False,
             "stage_log": False
             }
         }
+
+log_parsed = False
+log_object_deps = False
 
 logger.configure(**ccmodel_log_config)
 logger.disable("ccmodel")

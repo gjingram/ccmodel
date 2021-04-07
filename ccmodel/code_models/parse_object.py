@@ -2,16 +2,11 @@ from clang import cindex, enumerations
 import typing
 import pdb
 
-import illuminate.__config__.illuminate_config as il_cfg
-from illuminate.code_models.types import DependencyType
-from illuminate.code_models.decorators import (if_handle,
+from ..__config__ import ccmodel_config as ccm_cfg
+from .types import DependencyType
+from .decorators import (if_handle,
         append_cpo)
-import illuminate.rules.code_model_map as cmm
-
-import re
-
-
-python_var_pattern = re.compile("(^[a-zA-Z_][a-zA-Z0-9_\.]*)")
+from ..rules import code_model_map as cmm
 
 linkage_map = {
         cindex.LinkageKind.EXTERNAL: 'EXTERNAL',
@@ -28,7 +23,8 @@ class ParseObject(object):
         self.linkage = linkage_map[node.linkage] if node else 'EXTERNAL'
         self.kind = node.kind if node is not None else None
         self.id = node.spelling if node else ""
-        self.type = None if node is None else (node.canonical if node.type != '' else None)
+        canonical_type = node.canonical.type.spelling if node is not None else ''
+        self.type = '' if node is None else canonical_type
         self.usr = node.get_usr() if node is not None else None
         self.displayname = node.displayname if node else ""
         self.line_number = node.location.line if node else 0
@@ -47,6 +43,12 @@ class ParseObject(object):
         self.force_parse = force_parse
 
         self.scope_name = ""
+        self.determine_scope_name(node)
+
+        return
+
+    def determine_scope_name(self, node: cindex.Cursor) -> None:
+        self.scope_name = ""
         scope_parts = []
         if node is not None:
             parent = node.semantic_parent
@@ -59,7 +61,6 @@ class ParseObject(object):
                 else self.id
         if self.qualified_id == "GlobalNamespace":
             self.qualified_id = ""
-
         return
 
     def search_objects_by_name(self, search_str: str) -> typing.Union['ParseObject', None]:
@@ -97,6 +98,7 @@ class ParseObject(object):
                 if self.scope and self.scope.qualified_id else self.id
         return self
 
+    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'ParseObject':
         self.header.register_object(self)
         if not self.is_definition:

@@ -3,10 +3,10 @@ import os
 import typing
 import pdb
 
-from illuminate.code_models.decorators import (if_handle,
+from .decorators import (if_handle,
         append_cpo)
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.NAMESPACE)
@@ -20,6 +20,7 @@ class NamespaceObject(ParseObject):
             self.id = 'GlobalNamespace'
             self.qualified_id = 'GlobalNamespace'
             self.namespace_scope = None
+            self.kind = cindex.CursorKind.NAMESPACE
 
         self.header = None
         self.original_cpp_object = True
@@ -47,7 +48,14 @@ class NamespaceObject(ParseObject):
         self.usr_map = {}
         self.all_objects = []
 
+        self._is_class = False
+
         return
+
+    def __getitem__(self, item) -> 'ParseObject':
+        name_compare = item[0].replace(' ', '')
+        if name_compare in self.identifier_map:
+            return self.usr_map[self.identifier_map[name_compare]]
 
     def add_namespace(self, ns: 'NamespaceObject') -> None:
         self.namespaces.append(ns)
@@ -111,15 +119,15 @@ class NamespaceObject(ParseObject):
 
     def add_object(self, add_method, node: cindex.Cursor) -> None:
         obj = self.create_clang_child_object(node)
-        
         if obj is None:
             return
-
         add_method(obj)
+        self.identifier_map[obj.get_name()] = obj.usr
+        self.usr_map[obj.usr] = obj
+        self.all_objects.append(obj)
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'NamespaceObject':
 
         ParseObject.handle(self, node)
@@ -133,28 +141,48 @@ class NamespaceObject(ParseObject):
 
                 cls_temp_obj = self.get_child_type(child)
                 class_template = cls_temp_obj(child).set_header(self.header).set_scope(self).handle(child)
-                class_template.header.header_add_template_class(class_template)
+                if class_template is None:
+                    continue
+                self.header.header_add_template_class(class_template)
 
                 self.add_class_template(class_template)
+                self.identifier_map[class_template.get_name()] = class_template.usr
+                self.usr_map[class_template.usr] = class_template
+                self.all_objects.append(class_template)
 
             if child.kind == cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION:
 
                 cls_temp_spec = self.get_child_type(child)
                 cls_template_spec = cls_temp_spec(child).set_header(self.header).set_scope(self).handle(child)
+                if cls_template_spec is None:
+                    continue
                 cls_template_spec.is_partial = True
-                cls_template_spec.header.header_add_template_class(cls_template_spec)
+                self.header.header_add_template_class(cls_template_spec)
 
                 self.add_class_template(cls_template_spec)
+                self.identifier_map[cls_template_spec.get_name()] = cls_template_spec.usr
+                self.usr_map[cls_template_spec.usr] = cls_template_spec
+                self.all_objects.append(cls_template_spec)
 
             if child.kind == cindex.CursorKind.TYPEDEF_DECL:
 
                 # Catch C typdef struct
                 if child.underlying_typedef_type.spelling.startswith('struct '):
                     struct_object = self.create_clang_child_object(child)
+                    if struct_object is None:
+                        continue
                     self.add_struct(struct_object)
+                    self.identifier_map[struct_object.get_name()] = struct_object.usr
+                    self.usr_map[struct_object.usr] = struct_object
+                    self.all_objects.append(struct_object)
                 else:
                     typedef = self.create_clang_child_object(child)
+                    if typedef is None:
+                        continue
                     self.add_typedef(typedef)
+                    self.identifier_map[typedef.get_name()] = typedef.usr
+                    self.usr_map[typedef.usr] = typedef
+                    self.all_objects.append(typedef)
 
             if child.kind == cindex.CursorKind.CLASS_DECL:
                 self.add_object(self.add_class, child)
@@ -168,10 +196,21 @@ class NamespaceObject(ParseObject):
             if child.kind == cindex.CursorKind.FUNCTION_TEMPLATE:
 
                 fn_temp_obj = self.get_child_type(child)
-                function_template = fn_temp_obj(child).set_header(self.header).set_scope(self).handle(child)
-                function_template.header.header_add_template_function(function_template)
+                function_template = None
+                if not self._is_class:
+                    function_template = fn_temp_obj(child).set_header(self.header).set_scope(self)\
+                            .is_function_template(True).handle(child)
+                else:
+                    function_template = fn_temp_obj(child).set_header(self.header).set_scope(self)\
+                            .is_method_template(True).handle(child)
 
+                if function_template is None:
+                    continue
+                self.header.header_add_template_function(function_template)
                 self.add_function_template(function_template)
+                self.identifier_map[function_template.get_name()] = function_template.usr
+                self.usr_map[function_template.usr] = function_template
+                self.all_objects.append(function_template)
 
             if child.kind == cindex.CursorKind.ENUM_DECL:
                 self.add_object(self.add_enumeration, child)
@@ -190,8 +229,14 @@ class NamespaceObject(ParseObject):
 
             if child.kind == cindex.CursorKind.TYPE_ALIAS_TEMPLATE_DECL:
                 temp_alias_obj = self.get_child_type(child)
+                alias_template = temp_alias_obj(child).set_header(self.header).set_scope(self).handle(child)
+                if alias_template is None:
+                    continue
                 self.add_type_alias_template(temp_alias_obj(child).set_header(self.header) \
                     .set_scope(self).handle(child))
+                self.identifier_map[alias_template.get_name()] = alias_template.usr
+                self.usr_map[alias_template.usr] = alias_template
+                self.all_objects.append(alias_template)
 
             if child.kind == cindex.CursorKind.USING_DIRECTIVE:
                 self.add_object(self.add_using_directive, child)

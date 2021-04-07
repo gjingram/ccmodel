@@ -1,9 +1,9 @@
 from clang import cindex, enumerations
 import typing
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.VAR_DECL)
@@ -21,7 +21,6 @@ class VariableObject(ParseObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> typing.Union['VariableObject']:
 
         ParseObject.handle(self, node)

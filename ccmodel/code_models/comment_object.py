@@ -1,7 +1,6 @@
 from clang import cindex
 
-import illuminate.rules.code_model_map as cmm
-
+from ..rules import code_model_map as cmm
 
 @cmm.default_code_model("comment")
 class CommentObject(object):

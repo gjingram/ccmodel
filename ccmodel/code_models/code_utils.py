@@ -1,5 +1,6 @@
+from clang import cindex
 import typing
-import illuminate.__config__.illuminate_config as il_cfg
+from ..__config__ import ccmodel_config as ccm_cfg
 import re
 import pdb
 
@@ -17,9 +18,8 @@ def add_to_list(list_in: typing.List['ParseObject'], obj: typing.Any, check_inst
     raise RuntimeError("Input object is expected to be an instance of {}".format(check_instance.__name__))
 
 
-def get_relative_id(scope_obj: 'ScopingObject', scope_name: str, id_use: str) -> str:
-    print(scope_obj.get_name())
-    if scope_name == scope_obj.get_name() or scope_obj.get_name() == "GlobalNamespace" or scope_obj.get_name() == "":
-        return id_use
+def get_relative_id(scope_node: 'cindex.Cursor', obj_node: 'cindex.Cursor', start_name) -> str:
+    if scope_node is None or scope_node.kind == cindex.CursorKind.TRANSLATION_UNIT or scope_node is obj_node:
+        return start_name
     else:
-        return get_relative_id(scope_obj.scope, scope_name, scope_obj.get_name() + "::" + id_use)
+        return get_relative_id(scope_node, obj_node.semantic_parent, obj_node.spelling + "::" + start_name)

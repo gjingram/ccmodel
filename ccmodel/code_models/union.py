@@ -1,10 +1,10 @@
 from clang import cindex, enumerations
 import typing
 
-from illuminate.code_models.decorators import (if_handle, 
+from .decorators import (if_handle, 
         append_cpo)
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.UNION_DECL)
@@ -17,7 +17,6 @@ class UnionObject(ParseObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'UnionObject':
 
         ParseObject.handle(self, node)

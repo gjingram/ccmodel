@@ -3,9 +3,9 @@ import typing
 import abc
 import pdb
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from ..rules import code_model_map as cmm
 
 class DirectiveObject(ParseObject, metaclass=abc.ABCMeta):
 
@@ -57,7 +57,6 @@ class UsingNamespaceObject(DirectiveObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> "UsingNamespaceObject":
         ParseObject.handle(self, node)
         return self
@@ -83,7 +82,6 @@ class UsingDeclarationObject(DirectiveObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> "UsingDeclarationObject":
         ParseObject.handle(self, node)
         return self

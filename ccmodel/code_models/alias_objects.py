@@ -4,11 +4,10 @@ import abc
 import re
 import pdb
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-from illuminate.code_models.template import TemplateObject
-from illuminate.collections.unit_summary import UnitSummary
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from .template import PartialSpecializationObject
+from ..rules import code_model_map as cmm
 
 
 class AliasObject(ParseObject, metaclass=abc.ABCMeta):
@@ -45,16 +44,18 @@ class TypeDefObject(AliasObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TypeDefObject':
 
-        ParseObject.handle(self, node)
-
         for child in self.children(node, cindex.CursorKind.STRUCT_DECL):
-            out = self.header.header_add_object(child)
-            out.set_scope(self.scope)
+            model = cmm.default_code_models[child.kind]
+            obj = model(child, force=True, name=self.get_name()).set_header(self.header)\
+                    .set_scope(self.scope).handle(child)
+            self.header.header_add_fns[child.kind](obj)
+            self.header.summary.identifier_map[obj.qualified_id] = obj.usr
+            self.header.summary.usr_map[obj.usr] = obj
             return None
 
+        ParseObject.handle(self, node)
         for child in node.get_children():
             if child.kind != cindex.CursorKind.NAMESPACE_REF:
                 self.header.header_get_dep(child, self)
@@ -71,7 +72,6 @@ class TypeAliasObject(TypeDefObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TypeAliasObject':
         return TypeDefObject.handle(self, node)
 
@@ -84,7 +84,6 @@ class NamespaceAliasObject(AliasObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'NamespaceAliasObject':
 
         ParseObject.handle(self, node)
@@ -99,37 +98,17 @@ class NamespaceAliasObject(AliasObject):
 
 
 @cmm.default_code_model(cindex.CursorKind.TYPE_ALIAS_TEMPLATE_DECL)
-class TemplateAliasObject(AliasObject, TemplateObject):
+class TemplateAliasObject(TypeAliasObject, PartialSpecializationObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
-        AliasObject.__init__(self, node, force)
-        TemplateObject.__init__(self, node, force)
-
+        TypeAliasObject.__init__(self, node, force)
+        PartialSpecializationObject.__init__(self, node, force)
+        self.is_alias = True
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TemplateAliasObject':
 
-        TemplateObject.handle(self, node)
-
-        tref = self.find_template_ref_node(node)
-        self.header.header_get_dep(tref, self)
+        PartialSpecializationObject.handle(self, node)
 
         return self
-
-    def find_template_ref_node(self, node: cindex.Cursor) -> typing.Optional[cindex.Cursor]:
-        children = [x for x in node.get_children()]
-        result = None
-        pdb.set_trace()
-        for child in children:
-            if child.kind == cindex.CursorKind.TEMPLATE_REF:
-                result = child
-                break
-            else:
-                result = self.find_template_ref_node(child)
-                if result is not None and result.kind == cindex.CursorKind.TEMPLATE_REF:
-                    break
-        return result
-
-

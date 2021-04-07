@@ -2,13 +2,11 @@ from clang import cindex, enumerations
 import typing
 import re
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject, \
-        python_var_pattern
-from illuminate.code_models.function import FunctionObject
-from illuminate.code_models.types import ClassType
-
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from .function import FunctionObject
+from .types import ClassType
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.CONSTRUCTOR)
@@ -39,7 +37,6 @@ class MemberFunctionObject(FunctionObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'MemberFunctionObject':
 
         FunctionObject.is_member(self, True)

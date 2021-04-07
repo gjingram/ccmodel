@@ -1,11 +1,10 @@
 from clang import cindex, enumerations
 import typing
 
-from illuminate.code_models.decorators import if_handle, append_cpo
-from illuminate.code_models.parse_object import ParseObject
-from illuminate.code_models.variable import VariableObject
-
-import illuminate.rules.code_model_map as cmm
+from .decorators import if_handle, append_cpo
+from .parse_object import ParseObject
+from .variable import VariableObject
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.FIELD_DECL)
@@ -21,7 +20,6 @@ class MemberObject(VariableObject):
         return
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'MemberObject':
         is_member = True
         VariableObject.handle(self, node)

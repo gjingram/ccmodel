@@ -2,21 +2,21 @@ from clang import cindex, enumerations
 import typing
 import pdb
 
-from illuminate.code_models.decorators import (if_handle, 
+from .decorators import (if_handle, 
         append_cpo)
-from illuminate.code_models.parse_object import ParseObject
-from illuminate.code_models.namespace import NamespaceObject
-from illuminate.code_models.member import MemberObject
-from illuminate.code_models.member_function import MemberFunctionObject
-from illuminate.code_models.types import ClassType
-import illuminate.rules.code_model_map as cmm
+from .parse_object import ParseObject
+from .namespace import NamespaceObject
+from .member import MemberObject
+from .member_function import MemberFunctionObject
+from .types import ClassType
+from ..rules import code_model_map as cmm
 
 
 @cmm.default_code_model(cindex.CursorKind.CLASS_DECL)
 @cmm.default_code_model(cindex.CursorKind.STRUCT_DECL)
 class ClassObject(NamespaceObject):
 
-    def __init__(self, node: cindex.Cursor, force: bool = False):
+    def __init__(self, node: cindex.Cursor, force: bool = False, name: typing.Optional[str] = None):
         NamespaceObject.__init__(self, node, force)
 
         self.class_constructors = []
@@ -30,7 +30,13 @@ class ClassObject(NamespaceObject):
 
         self.original_cpp_object = True
         self.is_final = False
-        
+
+        self._is_class = True
+
+        if name is not None:
+            self.id = name
+            self.display_name = name
+            self.determine_scope_name(node)
 
         return
 
@@ -39,7 +45,6 @@ class ClassObject(NamespaceObject):
         return cpo_class(node, self.force_parse).set_header(self.header).set_scope(self).handle(node)
 
     @if_handle
-    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'ClassObject':
 
         ParseObject.handle(self, node) 
