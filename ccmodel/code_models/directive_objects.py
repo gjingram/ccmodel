@@ -26,14 +26,14 @@ class DirectiveObject(ParseObject, metaclass=abc.ABCMeta):
         return self.directive_prefix + self.directive + ";"
 
     def set_names(self) -> None:
-
         self.directive = self.directive_prefix + self.directive
         self.id = self.directive
-        self.qualified_id = self.scope.qualified_id + ":" + self.directive_prefix.rstrip().upper() + ":" + \
+        self.scoped_id = self.scope.scoped_id + ":" + self.directive_prefix.rstrip().upper() + ":" + \
                 self.directive
-        self.qualified_id = self.qualified_id.replace("GlobalNamespace:", "")
-        if self.qualified_id[0] == ":":
-            self.qualified_id = self.qualified_id[1:]
+        self.scoped_displayname = self.scope.scoped_displayname + ":" + self.directive_prefix.rstrip().upper() + ":" + \
+                self.directive
+        self.scoped_id = self.scoped_id.replace("GlobalNamespace::", "")
+        self.scoped_displayname = self.scoped_displayname.replace("GlobalNamespace::", "")
 
         return
 
@@ -61,7 +61,7 @@ class UsingNamespaceObject(DirectiveObject):
         ParseObject.handle(self, node)
         return self
 
-    def get_qualified_id(self) -> None:
+    def get_scoped_id(self) -> None:
         return
 
 

@@ -5,7 +5,7 @@ import pdb
 
 from .decorators import (if_handle,
         append_cpo)
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params
 from ..rules import code_model_map as cmm
 
 
@@ -18,7 +18,7 @@ class NamespaceObject(ParseObject):
         if not node:
             self.displayname = 'GlobalNamespace'
             self.id = 'GlobalNamespace'
-            self.qualified_id = 'GlobalNamespace'
+            self.scoped_id = 'GlobalNamespace'
             self.namespace_scope = None
             self.kind = cindex.CursorKind.NAMESPACE
 
@@ -122,7 +122,7 @@ class NamespaceObject(ParseObject):
         if obj is None:
             return
         add_method(obj)
-        self.identifier_map[obj.get_name()] = obj.usr
+        self.identifier_map[obj.scoped_id] = obj.usr
         self.usr_map[obj.usr] = obj
         self.all_objects.append(obj)
         return
@@ -132,6 +132,8 @@ class NamespaceObject(ParseObject):
 
         ParseObject.handle(self, node)
 
+        tparents = [*self.template_parents, self.template_ref] if self.is_template else self.template_parents
+
         for child in node.get_children():
 
             if child.kind == cindex.CursorKind.NAMESPACE:
@@ -139,28 +141,35 @@ class NamespaceObject(ParseObject):
 
             if child.kind == cindex.CursorKind.CLASS_TEMPLATE:
 
+                actually_method = cindex.CursorKind.PARM_DECL in [x.kind for x in child.get_children()]
+                if actually_method:
+                    self.handle_function_template(child)
+                    continue
+
                 cls_temp_obj = self.get_child_type(child)
-                class_template = cls_temp_obj(child).set_header(self.header).set_scope(self).handle(child)
+                class_template = cls_temp_obj(child).add_template_parents(tparents)\
+                        .set_header(self.header).set_scope(self).handle(child)
                 if class_template is None:
                     continue
                 self.header.header_add_template_class(class_template)
 
                 self.add_class_template(class_template)
-                self.identifier_map[class_template.get_name()] = class_template.usr
+                self.identifier_map[class_template.scoped_id] = class_template.usr
                 self.usr_map[class_template.usr] = class_template
                 self.all_objects.append(class_template)
 
             if child.kind == cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION:
 
                 cls_temp_spec = self.get_child_type(child)
-                cls_template_spec = cls_temp_spec(child).set_header(self.header).set_scope(self).handle(child)
+                cls_template_spec = cls_temp_spec(child).add_template_parents(tparents)\
+                        .set_header(self.header).set_scope(self).handle(child)
                 if cls_template_spec is None:
                     continue
                 cls_template_spec.is_partial = True
                 self.header.header_add_template_class(cls_template_spec)
 
                 self.add_class_template(cls_template_spec)
-                self.identifier_map[cls_template_spec.get_name()] = cls_template_spec.usr
+                self.identifier_map[cls_template_spec.scoped_id] = cls_template_spec.usr
                 self.usr_map[cls_template_spec.usr] = cls_template_spec
                 self.all_objects.append(cls_template_spec)
 
@@ -172,7 +181,7 @@ class NamespaceObject(ParseObject):
                     if struct_object is None:
                         continue
                     self.add_struct(struct_object)
-                    self.identifier_map[struct_object.get_name()] = struct_object.usr
+                    self.identifier_map[struct_object.scoped_id] = struct_object.usr
                     self.usr_map[struct_object.usr] = struct_object
                     self.all_objects.append(struct_object)
                 else:
@@ -180,7 +189,7 @@ class NamespaceObject(ParseObject):
                     if typedef is None:
                         continue
                     self.add_typedef(typedef)
-                    self.identifier_map[typedef.get_name()] = typedef.usr
+                    self.identifier_map[typedef.scoped_id] = typedef.usr
                     self.usr_map[typedef.usr] = typedef
                     self.all_objects.append(typedef)
 
@@ -194,23 +203,8 @@ class NamespaceObject(ParseObject):
                 self.add_object(self.add_union, child)
      
             if child.kind == cindex.CursorKind.FUNCTION_TEMPLATE:
-
-                fn_temp_obj = self.get_child_type(child)
-                function_template = None
-                if not self._is_class:
-                    function_template = fn_temp_obj(child).set_header(self.header).set_scope(self)\
-                            .is_function_template(True).handle(child)
-                else:
-                    function_template = fn_temp_obj(child).set_header(self.header).set_scope(self)\
-                            .is_method_template(True).handle(child)
-
-                if function_template is None:
-                    continue
-                self.header.header_add_template_function(function_template)
-                self.add_function_template(function_template)
-                self.identifier_map[function_template.get_name()] = function_template.usr
-                self.usr_map[function_template.usr] = function_template
-                self.all_objects.append(function_template)
+                self.handle_function_template(child)
+                continue
 
             if child.kind == cindex.CursorKind.ENUM_DECL:
                 self.add_object(self.add_enumeration, child)
@@ -229,12 +223,12 @@ class NamespaceObject(ParseObject):
 
             if child.kind == cindex.CursorKind.TYPE_ALIAS_TEMPLATE_DECL:
                 temp_alias_obj = self.get_child_type(child)
-                alias_template = temp_alias_obj(child).set_header(self.header).set_scope(self).handle(child)
+                alias_template = temp_alias_obj(child).add_template_parents(tparents)\
+                        .set_header(self.header).set_scope(self).handle(child)
                 if alias_template is None:
                     continue
-                self.add_type_alias_template(temp_alias_obj(child).set_header(self.header) \
-                    .set_scope(self).handle(child))
-                self.identifier_map[alias_template.get_name()] = alias_template.usr
+                self.add_type_alias_template(alias_template)
+                self.identifier_map[alias_template.scoped_id] = alias_template.usr
                 self.usr_map[alias_template.usr] = alias_template
                 self.all_objects.append(alias_template)
 
@@ -247,6 +241,32 @@ class NamespaceObject(ParseObject):
         self.header.header_add_namespace(self)
         return self
 
+    def handle_function_template(self, child: cindex.Cursor) -> None:
+        tparents = [*self.template_parents, self.template_ref] if self.is_template else self.template_parents
+        fn_temp_obj = self.get_child_type(child)
+        function_template = None
+        if not self._is_class:
+            function_template = fn_temp_obj(child).add_template_parents(tparents)\
+                    .set_header(self.header).set_scope(self)\
+                    .is_function_template(True).handle(child)
+        else:
+            function_template = fn_temp_obj(child).add_template_parents(tparents)\
+                    .set_header(self.header).set_scope(self)\
+                    .is_method_template(True).handle(child)
+
+        if function_template is None:
+            return
+        self.header.header_add_template_function(function_template)
+        self.add_function_template(function_template)
+        self.identifier_map[function_template.scoped_id] = function_template.usr
+        self.usr_map[function_template.usr] = function_template
+        self.all_objects.append(function_template)
+        return 
+
     def create_clang_child_object(self, node: cindex.Cursor) -> 'ParseObject':
         cpo_class = self.get_child_type(node)
-        return cpo_class(node, self.force_parse).set_header(self.header).set_scope(self).handle(node)
+        tparents = self.template_parents if not self.is_template else [*self.template_parents,
+                self.template_ref]
+        return cpo_class(node, self.force_parse).add_template_parents(tparents)\
+                .set_header(self.header).set_scope(self).handle(node)
+

@@ -14,11 +14,11 @@ def if_handle(method):
 
         if self.do_handle(node):
             indented = False            
-            if not (self.header.header_file, self.line_number, self.qualified_id) in ccm_cfg.object_registry:
+            if not (self.header.header_file, self.line_number, self.scoped_id) in ccm_cfg.object_registry:
                 ccm_cfg.indenting_formatter.indent_level += 1
                 indented = True
-                self.object_logger.info('Parsing line: {} -- {}'.format(self.line_number, self.qualified_id))
-                ccm_cfg.object_registry.append((self.header.header_file, self.line_number, self.qualified_id))
+                self.object_logger.info('Parsing line: {} -- {}'.format(self.line_number, self.scoped_id))
+                ccm_cfg.object_registry.append((self.header.header_file, self.line_number, self.scoped_id))
 
             out = method(self, node)
           
@@ -51,35 +51,11 @@ def append_cpo(method):
     @functools.wraps(method)
     def _append_cpo(self, node: cindex.Cursor) -> None:
 
-        from .function import FunctionObject
-        from .member_function import MemberFunctionObject
-        from .template import TemplateObject
-        from .namespace import NamespaceObject
-
         obj = method(self, node)
         if obj is None:
             return None
 
-        id_use = obj.qualified_id
-        template_fn = False
-        template_method = False
-        if isinstance(obj, TemplateObject):
-            template_fn = isinstance(obj.obj, FunctionObject)
-            template_method = isinstance(obj.obj, MemberFunctionObject)
-        if isinstance(obj, FunctionObject) or template_fn or template_method:
-            info = None
-            if template_fn or template_method:
-                info = obj.obj.info
-            else:
-                info = obj.info
-            append = "(" + ", ".join([x.type for x in info["args"].values()]) + ")"
-            id_use += append
-        if (isinstance(obj, MemberFunctionObject) or template_method) \
-                and obj.is_const:
-            id_use += " const"
-       
-        
-        add_obj_to_header_summary(id_use, obj)
+        add_obj_to_header_summary(obj.scoped_displayname, obj)
         
         return obj
 

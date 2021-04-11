@@ -4,7 +4,7 @@ import pdb
 
 from .decorators import (if_handle, 
         append_cpo)
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params
 from .namespace import NamespaceObject
 from .member import MemberObject
 from .member_function import MemberFunctionObject
@@ -26,7 +26,6 @@ class ClassObject(NamespaceObject):
         self.class_parent_types = []
 
         self.class_type = ClassType.CONCRETE
-        self._is_template = False
 
         self.original_cpp_object = True
         self.is_final = False
@@ -35,19 +34,24 @@ class ClassObject(NamespaceObject):
 
         if name is not None:
             self.id = name
-            self.display_name = name
+            self.displayname = name
             self.determine_scope_name(node)
 
         return
 
-    def create_clang_child_object(self, node: cindex.Cursor) -> 'ParseObject':
-        cpo_class = self.get_child_type(node)
-        return cpo_class(node, self.force_parse).set_header(self.header).set_scope(self).handle(node)
+    def set_template_ref(self, templ: 'TemplateObject') -> 'ClassObject':
+        self.is_template = True
+        self.template_ref = templ
+        return self
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'ClassObject':
 
-        ParseObject.handle(self, node) 
+        NamespaceObject.handle(self, node) 
+
+        if not self.is_template:
+            self.header.header_add_class(self)
+
         for child in node.get_children():
 
             # Resolve parent ClassObject when creating module links
@@ -80,14 +84,7 @@ class ClassObject(NamespaceObject):
 
             if child.kind == cindex.CursorKind.CXX_FINAL_ATTR and not self.is_final:
                 self.is_final = True
-
-        if not self._is_template:
-            self.header.header_add_class(self)
-
-        return self
-
-    def is_template(self, is_it: bool) -> 'ClassObject':
-        self._is_template = is_it
+        
         return self
 
     def add_class_parent_type(self, class_in: cindex.CursorKind) -> None:

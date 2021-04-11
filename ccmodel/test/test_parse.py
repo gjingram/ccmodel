@@ -47,17 +47,27 @@ class TestCCModelParseTest(object):
     def test_parse_objects_exist(cls_type, lps):
         summary = lps[cls_type.parse_state.test_file_abs]
 
+        pdb.set_trace()
+        print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")
         expected_keys = [
                 "GlobalNamespace",
                 "testEnum1",
-                "A",
-                "B",
+                "testEnum1::A",
+                "testEnum1::B",
                 "testEnum2",
                 "testEnum2::A",
                 "testEnum2::B",
                 "testFunc1(double, float, int)",
+                "testFunc1(double, float, int)::param0",
+                "testFunc1(double, float, int)::a",
+                "testFunc1(double, float, int)::b",
                 "testFunc1(int, float, double)",
+                "testFunc1(int, float, double)::param0",
+                "testFunc1(int, float, double)::param1",
+                "testFunc1(int, float, double)::a",
                 "testFunc1(double *, double &)",
+                "testFunc1(double *, double &)::param0",
+                "testFunc1(double *, double &)::param1",
                 "var",
                 "statVar",
                 "etherStateVar",
@@ -68,10 +78,17 @@ class TestCCModelParseTest(object):
                 "doubleVec",
                 "floatVec",
                 "ttNamespace1",
-                "USING: using std::vector",
+                ":USING: using std::vector",
                 "std::vector<~, ~>",
-                "USING: using namespace testNamespace1::testNamespace2",
-                "testTemplateFunction<~, ~, ~, 1, ~...>(A&)",
+                ":USING: using namespace testNamespace1::testNamespace2",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>::O",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>::A",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>::n",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>::b",
+                "testTemplateFunction<~, ~, size_t~, size_t[1], [~...]>::var",
+                "testTemplateFunction(A&)::classIn",
+                "testTemplateFunction(A&)",
                 "TestCStruct",
                 "TestCStruct::a1",
                 "TestCStruct::a2",
@@ -85,9 +102,12 @@ class TestCCModelParseTest(object):
                 "TestCppClass",
                 "TestCppClass::TestCppClass()",
                 "TestCppClass::TestCppClass(double)",
+                "TestCppClass::TestCppClass(double)::param0",
                 "TestCppClass::~TestCppClass()",
                 "TestCppClass::testMethod1(TestCppClass &) const",
+                "TestCppClass::testMethod1(TestCppClass &)::param0",
                 "TestCppClass::testMethod2(float)",
+                "TestCppClass::testMethod2(float)::param0",
                 "TestCppClass::testMethod3()",
                 "TestCppClass::t",
                 "TestCppClass::testMethod1()",
@@ -109,6 +129,3 @@ class TestCCModelParseTest(object):
         pdb.set_trace()
         for key in expected_keys:
             assert summary.name_in_summary(key)
-        ek_no_spaces = [x.replace(' ', '') for x in expected_keys]
-        for identifier in summary.indentifier_map.keys():
-            assert identifier in ek_no_spaces

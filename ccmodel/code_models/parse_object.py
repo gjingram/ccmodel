@@ -1,5 +1,6 @@
 from clang import cindex, enumerations
 import typing
+import regex
 import pdb
 
 from ..__config__ import ccmodel_config as ccm_cfg
@@ -16,6 +17,53 @@ linkage_map = {
         cindex.LinkageKind.UNIQUE_EXTERNAL: 'UNIQUE_EXTERNAL'
 }
 
+template_targlist = r"(?P<match>(?P<t_name>(?::{2})?\w*(?::{2}~?\w*)*[^<])(?P<t_section>\s*<\s*(?P<t_arglist>.*)\s*>\s*))"
+re_targlist = regex.compile(template_targlist)
+
+def split_template_list(args_in: str) -> typing.List[str]:
+    bracket_level = 0
+    str_buffer = []
+    out = []
+    for char in args_in:
+        if bracket_level == 0 and char == ",":
+            out.append("".join(str_buffer).strip())
+            str_buffer = []
+            continue
+        if char == "<":
+            bracket_level += 1
+        if char == ">":
+            bracket_level -= 1
+        str_buffer.append(char)
+    out.append("".join(str_buffer).strip())
+    return out
+
+def replace_template_params(obj: 'ParseObject'):
+    if len(obj.template_parents) == 0 or obj.template_params_replaced:
+        return
+
+    rparams = []
+    for parent in obj.template_parents:
+        rparams.extend([x.get_name() for x in parent.template_parameters])
+
+    template_match = re_targlist.search(obj.scoped_displayname.replace(' ' ,''))
+    if template_match is None:
+        return
+   
+    template_list = split_template_list(template_match.group('t_arglist'))
+    for rparam in rparams:
+        for idx, param in enumerate(template_list):
+            if param == rparam:
+                template_list[idx] = "~"
+                break
+            if "type-parameter" in param:
+                template_list[idx] = "~"
+                break
+    new_post = "<" + ", ".join(template_list) + ">"
+    obj.scoped_displayname = obj.scoped_id.replace(' ', '').replace(template_match.group('t_section'), new_post)
+    obj.template_params_replaced = True
+
+    return
+
 class ParseObject(object):
 
     def __init__(self, node: typing.Union[cindex.Cursor, None], force_parse: bool = False):
@@ -23,8 +71,8 @@ class ParseObject(object):
         self.linkage = linkage_map[node.linkage] if node else 'EXTERNAL'
         self.kind = node.kind if node is not None else None
         self.id = node.spelling if node else ""
-        canonical_type = node.canonical.type.spelling if node is not None else ''
-        self.type = '' if node is None else canonical_type
+        self.canonical_type = node.canonical.type.spelling if node is not None else ''
+        self.type = node.type.spelling if node is not None else ''
         self.usr = node.get_usr() if node is not None else None
         self.displayname = node.displayname if node else ""
         self.line_number = node.location.line if node else 0
@@ -41,11 +89,21 @@ class ParseObject(object):
         self.is_also = []
         self.brief = None
         self.force_parse = force_parse
+        self.template_parents = []
+        self.template_params_replaced = False
+        self.is_template = False
 
         self.scope_name = ""
+        self.scoped_id = ""
+        self.scoped_displayname = ""
+
         self.determine_scope_name(node)
 
         return
+
+    def add_template_parents(self, tparents: typing.List['TemplateObject']) -> 'ParseObject':
+        self.template_parents.extend(tparents)
+        return self
 
     def determine_scope_name(self, node: cindex.Cursor) -> None:
         self.scope_name = ""
@@ -57,10 +115,13 @@ class ParseObject(object):
                 parent = parent.semantic_parent
             scope_parts.reverse()
             self.scope_name = "::".join(scope_parts) if len(scope_parts) > 0 else ""
-        self.qualified_id = "::".join([self.scope_name, self.id]) if self.scope_name != "" \
+        self.scoped_id = "::".join([self.scope_name, self.id]) if self.scope_name != "" \
                 else self.id
-        if self.qualified_id == "GlobalNamespace":
-            self.qualified_id = ""
+        self.scoped_displayname = "::".join([self.scope_name, self.displayname]) if self.scope_name != "" \
+                else self.displayname
+        if self.scoped_id == "GlobalNamespace":
+            self.scoped_id = ""
+
         return
 
     def search_objects_by_name(self, search_str: str) -> typing.Union['ParseObject', None]:
@@ -94,12 +155,11 @@ class ParseObject(object):
 
     def set_scope(self, scope: 'ParseObject') -> 'ParseObject':
         self.scope = scope
-        self.qualified_id = (self.scope.qualified_id + "::" + self.id).replace('GlobalNamespace::', '') \
-                if self.scope and self.scope.qualified_id else self.id
         return self
 
     @append_cpo
     def handle(self, node: cindex.Cursor) -> 'ParseObject':
+        replace_template_params(self)
         self.header.register_object(self)
         if not self.is_definition:
             self.definition = self.header.get_usr(node.referenced.get_usr())
@@ -136,7 +196,10 @@ class ParseObject(object):
 
     def create_clang_child_object(self, node: cindex.Cursor) -> 'ParseObject':
         cpo_class = self.get_child_type(node)
-        return cpo_class(node, self.force_parse).set_header(self.header).set_scope(self).handle(node)
+        tparents = self.template_parents if not self.is_template else [*self.template_parents,
+                self.template_ref]
+        return cpo_class(node, self.force_parse).add_template_parents(tparents)\
+                .set_header(self.header).set_scope(self.scope).handle(node)
 
     def descendant_of_object(self, obj: 'ParseObject') -> bool:
 
@@ -152,7 +215,7 @@ class ParseObject(object):
         return False
 
     def get_child_type(self, node: cindex.Cursor) -> typing.Type:
-        using_name = self.qualified_id + "::" + node.spelling if self.qualified_id \
+        using_name = self.scoped_id + "::" + node.spelling if self.scoped_id \
                 != "" else (self.scope_name + "::" + node.spelling if self.scope_name != "" \
                 else node.spelling)
         if using_name in cmm.object_code_models:

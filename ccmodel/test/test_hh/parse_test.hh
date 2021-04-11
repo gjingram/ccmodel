@@ -104,7 +104,7 @@ class TestTemplateClass1 : public TestCppClass, public TestCppStruct {
     virtual void testMethod3() override;
 
     template<class T>
-    double testMethod4(A&);
+    T testMethod4(A&);
 
     double testMethod5(B&);
 

@@ -115,7 +115,7 @@ class HeaderObject(object):
         return
 
     def add_usr(self, obj: ParseObject) -> None:
-        self.summary.identifier_map[obj.qualified_id] = obj.usr
+        self.summary.identifier_map[obj.scoped_id] = obj.usr
         self.summary.usr_map[usr] = obj
         return
 
@@ -135,7 +135,8 @@ class HeaderObject(object):
     def header_get_dep(self, child: cindex.Cursor, po: ParseObject) -> 'ParseObject':
         ref_node = None
         if not child.is_definition():
-            ref_node = child.get_definition()
+            test_node = child.get_definition()
+            ref_node = child if test_node is None else test_node
         else:
             ref_node = child
         dep_obj = self.get_usr(ref_node.get_usr())
@@ -146,25 +147,26 @@ class HeaderObject(object):
             po.dep_objs.append(self.header_add_object(self.base_namespace, ref_node))
         return dep_obj
 
-    def header_match_template_ref(self, qual: str, params: typing.Tuple[str]) -> 'TemplateObject':
+    def header_match_template_ref(self, qual: str, params: typing.Tuple[str]) -> typing.Optional['TemplateObject']:
+        if not qual in self.template_specializations:
+            return None
         specializations = self.template_specializations[qual]
         possible_match_keys = []
         for spec_key in specializations.keys():
             if len(spec_key) == len(params):
                 possible_match_keys.append(list(spec_key))
-            elif len(params) > len(spec_key) and spec_key[-1].endswith("..."):
+            elif len(params) > len(spec_key) and spec_key[-1].endswith("[~...]"):
                 possible_match_keys.append(list(spec_key))
             elif len(params) < len(spec_key):
                 start_list = copy.deepcopy(spec_key)
                 default_or_variadic = True
                 end_is_variadic = False
                 for remain in spec_key[len(params):]:
-                    default = re.param.search(remain).group('default') is not None
-                    variadic = remain.endswith('...')
-                    default_or_variadic &= ( \
-                            re_param.search(remain).group('default') is not None or \
-                            remain.endswith('...') \
-                            )
+                    default_val = re.param.search(remain).group('default')
+                    default = default_val is not None and default_val != "~" and \
+                            default_val != "~..."
+                    variadic = remain.endswith('[~...]')
+                    default_or_variadic &= default or variadic
                 if default_or_variadic:
                     possible_match_keys.append(spec_key)
         match_copies = copy.deepcopy(possible_match_keys)
@@ -212,7 +214,7 @@ class HeaderObject(object):
         obj = model(node, True).set_header(self).handle(node)
         self.header_add_fns[node.kind](obj)
         self.summary.usr_map[obj.usr] = obj
-        self.summary.identifier_map[obj.qualified_id] = obj.usr
+        self.summary.identifier_map[obj.scoped_id] = obj.usr
         return obj
 
     def header_add_class(self, _class: ClassObject) -> None:
@@ -312,9 +314,9 @@ class HeaderObject(object):
         self.summary.function_params.append(param)
         return
 
-    def get_namespace_by_qualified_id(self, ns_id: str) -> typing.Union['NamespaceObject', None]:
+    def get_namespace_by_scoped_id(self, ns_id: str) -> typing.Union['NamespaceObject', None]:
         for ns in self.summary.namespaces:
-            if ns.qualified_id == ns_id:
+            if ns.scoped_id == ns_id:
                 return ns
         return None
 

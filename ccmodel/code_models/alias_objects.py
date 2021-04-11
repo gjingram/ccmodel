@@ -5,7 +5,7 @@ import re
 import pdb
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params
 from .template import PartialSpecializationObject
 from ..rules import code_model_map as cmm
 
@@ -29,7 +29,7 @@ class AliasObject(ParseObject, metaclass=abc.ABCMeta):
         return self.alias
 
     def get_using_string(self) -> str:
-        return "using " + self.qualified_id + " = " + self.alias + ";"
+        return "using " + self.scoped_id + " = " + self.alias + ";"
 
 
 @cmm.default_code_model(cindex.CursorKind.TYPEDEF_DECL)
@@ -45,13 +45,13 @@ class TypeDefObject(AliasObject):
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'TypeDefObject':
-
         for child in self.children(node, cindex.CursorKind.STRUCT_DECL):
             model = cmm.default_code_models[child.kind]
-            obj = model(child, force=True, name=self.get_name()).set_header(self.header)\
+            obj = model(child, force=True, name=self.get_name()).add_template_parents(self.template_parents)\
+                    .set_header(self.header)\
                     .set_scope(self.scope).handle(child)
             self.header.header_add_fns[child.kind](obj)
-            self.header.summary.identifier_map[obj.qualified_id] = obj.usr
+            self.header.summary.identifier_map[obj.scoped_displayname] = obj.usr
             self.header.summary.usr_map[obj.usr] = obj
             return None
 
@@ -107,8 +107,10 @@ class TemplateAliasObject(TypeAliasObject, PartialSpecializationObject):
         return
 
     @if_handle
+    @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TemplateAliasObject':
 
+        replace_template_params(self)
         PartialSpecializationObject.handle(self, node)
 
         return self

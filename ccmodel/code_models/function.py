@@ -1,8 +1,9 @@
 from clang import cindex, enumerations
 import typing
+import pdb
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params
 from .function_param import FunctionParamObject
 from ..rules import code_model_map as cmm
 
@@ -23,7 +24,8 @@ class FunctionObject(ParseObject):
 
         self.info['args'] = {}
         self._is_member = False
-        self._is_template = False
+        self.is_template = False
+        self.template_ref = None
         self.name = self.id
 
         self.original_cpp_object = True
@@ -45,14 +47,16 @@ class FunctionObject(ParseObject):
         self._is_member = is_it
         return self
 
-    def is_template(self, is_it: bool) -> 'FunctionObject':
-        self._is_template = is_it
+    def set_template_ref(self, templ: 'TemplateObject') -> 'FunctionObject':
+        self.is_template = True
+        self.template_ref = templ
         return self
 
     @if_handle
     @append_cpo
     def handle(self, node: cindex.Cursor) -> 'FunctionObject':
 
+        replace_template_params(self)
         self.header.register_object(self)
         if not self.is_definition:
             self.definition = self.header.get_usr(node.referenced.get_usr())
@@ -60,25 +64,24 @@ class FunctionObject(ParseObject):
         types = []
         for child in self.children(node, cindex.CursorKind.PARM_DECL):
             types.append(child.type.spelling)
-        old_qual_id = self.qualified_id
-        self.qualified_id += f"({','.join(types)})"
 
         for child in node.get_children():
 
             if child.kind == cindex.CursorKind.PARM_DECL:
 
                 using_cls = self.get_child_type(child)
-
                 param_var = using_cls(child)
                 
                 if param_var.id == "":
                     param_var.id = "param{}".format(self.n_args)
                     param_var.displayname = param_var.id
+                    param_var.scoped_displayname = param_var.displayname
                     param_var.anonymous = True
 
                 param_var.set_function(self)
                 param_var.set_header(self.header)
                 param_var.set_scope(self)
+                param_var.set_scoped_id()
                 param_var.handle(child)
 
                 self.add_function_param(param_var)
@@ -91,10 +94,8 @@ class FunctionObject(ParseObject):
                     if arg_list[argidx].spelling == '=':
                         param_var.set_default_value(arg_list[argidx+1].spelling)
 
-        if not self._is_member and not self._is_template:
+        if not self._is_member and not self.is_template:
             self.header.header_add_function(self)
-
-        self.qualified_id = old_qual_id
 
         return self
 

@@ -5,7 +5,7 @@ import regex
 
 from .decorators import (if_handle, 
         append_cpo)
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params, split_template_list
 from .template_param import TemplateParamObject
 from ..rules import code_model_map as cmm
 
@@ -44,30 +44,7 @@ class TemplateObject(ParseObject):
     @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TemplateObject':
 
-        if self.qualified_id in cmm.object_code_models:
-            self.obj_class = cmm.object_code_models[self.qualified_id]
-        elif node.kind == cindex.CursorKind.CLASS_TEMPLATE:
-            self.obj_class = cmm.default_code_models[cindex.CursorKind.CLASS_DECL]
-            self.obj = self.obj_class(node, True).set_header(self.header).set_scope(self.scope).is_template(True).handle(node)
-        elif node.kind == cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION:
-            self.is_partial = True
-            self.obj_class = cmm.default_code_models[cindex.CursorKind.CLASS_DECL]
-            self.obj = self.obj_class(node, True).set_header(self.header).set_scope(self.scope).is_template(True).handle(node)
-        elif node.kind == cindex.CursorKind.FUNCTION_TEMPLATE:
-            if self._is_function_template:
-                self.obj_class = cmm.default_code_models[cindex.CursorKind.FUNCTION_DECL]
-            elif self._is_method_template:
-                self.obj_class = cmm.default_code_models[cindex.CursorKind.CXX_METHOD]
-            self.obj = self.obj_class(node, True).set_header(self.header).set_scope(self.scope).is_template(True).handle(node)
-            pass
-        else:
-            if self.is_partial:
-                return None
-
-        self.header.register_object(self)
-        if not self.is_definition:
-            self.definition = self.header.get_usr(node.referenced.get_usr())
-
+        replace_template_params(self)
         node_children = []
         for child in node.get_children():
 
@@ -86,11 +63,38 @@ class TemplateObject(ParseObject):
             else:
                 continue
 
-        self.qualified_id += f"<{','.join([x.param for x in self.template_parameters])}>"
-        for node, param in zip(node_children, self.template_parameters):
-            param.qualified_id = self.qualified_id + "::" + param.id
-            param.handle(node)
+        self.scoped_displayname = self.scoped_id + f"<{','.join([x.param for x in self.template_parameters])}>"
+        for child_node, param in zip(node_children, self.template_parameters):
+            param.scoped_displayname = self.scoped_displayname + "::" + param.id
+            param.handle(child_node)
 
+        tparents = [*self.template_parents, self]
+        if self.scoped_id in cmm.object_code_models:
+            self.obj_class = cmm.object_code_models[self.scoped_id]
+        elif node.kind == cindex.CursorKind.CLASS_TEMPLATE:
+            self.obj_class = cmm.default_code_models[cindex.CursorKind.CLASS_DECL]
+            self.obj = self.obj_class(node, True).add_template_parents(tparents)\
+                    .set_header(self.header).set_scope(self.scope).set_template_ref(self).handle(node)
+        elif node.kind == cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION:
+            self.is_partial = True
+            self.obj_class = cmm.default_code_models[cindex.CursorKind.CLASS_DECL]
+            self.obj = self.obj_class(node, True).add_template_parents(tparents)\
+                    .set_header(self.header).set_scope(self.scope).set_template_ref(self).handle(node)
+        elif node.kind == cindex.CursorKind.FUNCTION_TEMPLATE:
+            if self._is_function_template:
+                self.obj_class = cmm.default_code_models[cindex.CursorKind.FUNCTION_DECL]
+            elif self._is_method_template:
+                self.obj_class = cmm.default_code_models[cindex.CursorKind.CXX_METHOD]
+            self.obj = self.obj_class(node, True).add_template_parents(tparents)\
+                    .set_header(self.header).set_scope(self.scope).set_template_ref(self).handle(node)
+        else:
+            if self.is_partial:
+                return None
+
+        self.header.register_object(self)
+        if not self.is_definition:
+            self.definition = self.header.get_usr(node.referenced.get_usr())
+        
         self.n_template_params = len(self.template_parameters)
         self.resolve_primary_ref()
 
@@ -106,18 +110,6 @@ class TemplateObject(ParseObject):
         template_param.set_scope(self.scope)
         template_param.obj = self.obj
         template_param.template = self
-        
-        toks = list(node.get_tokens())
-        for tok_idx, tok in enumerate(toks):
-
-            if toks[tok_idx-1].spelling == template_param.get_name() and \
-                tok.spelling == '=':
-
-                template_param.set_default_value(toks[tok_idx+1].spelling)
-
-            if tok.spelling == "...":
-                template_param.is_variadic(True)
-
         self.add_template_param(template_param)
 
         return
@@ -129,12 +121,12 @@ class TemplateObject(ParseObject):
     def resolve_primary_ref(self) -> None:
         if self.is_primary:
             self.primary_ref = self
-            self.header.template_specializations[self.qualified_id] = {}
-            self.header.template_specializations[self.qualified_id][tuple([x.param for x in self.template_parameters])] = \
+            self.header.template_specializations[self.scoped_id] = {}
+            self.header.template_specializations[self.scoped_id][tuple([x.param for x in self.template_parameters])] = \
                     self
             return
         elif not self.is_alias:
-            specializations = self.header.template_specializations[self.qualified_id]
+            specializations = self.header.template_specializations[self.scoped_id]
             for spec in specializations.values():
                 if spec.is_primary:
                     self.primary_ref = spec
@@ -143,19 +135,12 @@ class TemplateObject(ParseObject):
 
         return
 
-'''
-template decl: \btemplate\s*<(?P<t_arglist>.*)>(?=:{2}|\s*\w)
-type param: (?:typename|class)\s*(?P<name>\w*)
-template: \b(?P<cls_name>\w*)\s*<(?P<t_arglist>.*)>
-class: (?:class|struct)\s*\b(?P<cls_name>\w*)\s*<(?P<t_arglist>.*)>
-template type alias: using\s*(?P<alias>\w*)\s*=\s*(?P<type>.*)
-'''
-
 template_decl = r"\btemplate\s*<(?P<t_arglist>.*)>(?=\s*(:{2})?\w)"
-template_type_param = r"\b(?:typename|class)\s*(?P<name>\w*)"
-template_nontype_param = r"\b(?P<type>\w*)\s*(?P<name>\w*)"
+template_type_param = r"(?P<template_def>^template\s*<(?P<t_arglist>\s*.*\s*)>)?\s*"
+template_type_param += r"(?:class|typename)\s*(?:\.{3}\s*)?(?P<name>\w*)(?:\s*=\s*(?P<default>.*$))?"
+template_nontype_param = r"(?P<type>\w*)\s*(?P<name>\w*)(?:\s*=\s*(?P<default>.*$))?"
 template_class = r"(?:class|struct)\s*(?P<cls_name>\w*)\s*<(?P<t_arglist>.*)>"
-template_alias = "using\s*(?P<alias>\w*)\s*=\s*(?P<cls_name>\w*)\s*(?:<(?P<t_arglist>.*)>)?"
+template_alias = r"using\s*(?P<alias>\w*)\s*=\s*(?P<cls_name>\w*)\s*(?:<(?P<t_arglist>.*)>)?"
 
 re_template_decl = regex.compile(template_decl)
 re_type_param = regex.compile(template_type_param)
@@ -167,23 +152,6 @@ class TemplateParamTypes:
     TYPE = 0
     NONTYPE = 1
     TEMPLATE = 2
-
-def split_template_list(args_in: str) -> typing.List[str]:
-    bracket_level = 0
-    str_buffer = []
-    out = []
-    for char in args_in:
-        if bracket_level == 0 and char == ",":
-            out.append("".join(str_buffer).strip())
-            str_buffer = []
-            continue
-        if char == "<":
-            bracket_level += 1
-        if char == ">":
-            bracket_level -= 1
-        str_buffer.append(char)
-    out.append("".join(str_buffer).strip())
-    return out
 
 @cmm.default_code_model(cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION)
 class PartialSpecializationObject(TemplateObject):
@@ -211,15 +179,16 @@ class PartialSpecializationObject(TemplateObject):
     def process_template_paramlist(self, paramlist) -> None:
         pmatches = split_template_list(paramlist)
         for pmatch in pmatches:
-            ttmatch = re_template_decl.match(pmatch)
             tmatch = re_type_param.match(pmatch)
             ntmatch = re_nontype_param.match(pmatch)
-            if ttmatch is not None:
-                self.add_template_decl_param(TemplateParamTypes.TEMPLATE, "~",
-                        ttmatch.group('name'))
-            elif tmatch is not None:
-                self.add_template_decl_param(TemplateParamTypes.TYPE, "~",
-                        tmatch.group('name'))
+            if tmatch is not None:
+                tmatch_groupdict = tmatch.groupdict()
+                if "template_def" in tmatch_groupdict and tmatch_groupdict["template_def"] is not None:
+                    self.add_template_decl_param(TemplateParamTypes.TEMPLATE, "~",
+                            tmatch.group('name'))
+                elif "name" in tmatch_groupdict and tmatch_groupdict["name"] is not None:
+                    self.add_template_decl_param(TemplateParamTypes.TYPE, "~",
+                            tmatch.group('name'))
             elif ntmatch is not None:
                 self.add_template_decl_param(TemplateParamTypes.NONTYPE,
                         ntmatch.group('type'), ntmatch.group('name'))
@@ -241,7 +210,8 @@ class PartialSpecializationObject(TemplateObject):
             cmatch = re_template_alias.search(self.partial_text)
         if cmatch is not None:
             self._primary_name = cmatch.group('cls_name')
-            self.process_class_template_arglist(cmatch.group('t_arglist'))
+            if "t_arglist" in cmatch.groupdict() and cmatch.groupdict()["t_arglist"] is not None:
+                self.process_class_template_arglist(cmatch.group('t_arglist'))
 
         for pidx, param in enumerate(self._class_arglist):
             for tparam in self._template_decl_params:
@@ -253,12 +223,13 @@ class PartialSpecializationObject(TemplateObject):
         return tuple((arg for arg in self._class_arglist))
 
     def handle(self, node: cindex.Cursor) -> 'PartialSpecializationObject':
+        replace_template_params(self)
         TemplateObject.handle(self, node)
         self.parse_template_decl()
         self.partial_ref = \
                 self.header.header_match_template_ref(self._primary_name, self.extract_params())
         self.dep_objs.append(self.partial_ref)
-        self.qualified_id += f"<{''.join([x for x in self._class_arglist])}>"
+        self.scoped_displayname
         return self
 
 

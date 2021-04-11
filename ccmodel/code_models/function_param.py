@@ -23,9 +23,9 @@ class FunctionParamObject(ParseObject):
 
         return
 
-    def set_qualified_id(self) -> 'FunctionParamObject':
-        
-        self.qualified_id = self.fn.qualified_id + "::{}".format(self.id)
+    def set_scoped_id(self) -> 'FunctionParamObject':
+        self.scoped_id = self.fn.scoped_id + "::{}".format(self.id)
+        self.scoped_displayname = self.fn.scoped_displayname + "::{}".format(self.id)
         return self
 
     @if_handle

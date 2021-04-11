@@ -13,9 +13,7 @@ class EnumConstDeclObject(ParseObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         ParseObject.__init__(self, node, force)
-
         self.value = node.enum_value
-
         return
 
     @if_handle
@@ -60,9 +58,11 @@ class EnumObject(ParseObject):
 
     def create_clang_child_object(self, node: cindex.Cursor) -> 'EnumConstDeclObject':
         cpo_class = self.get_child_type(node)
+        tparents = [*self.template_parents, self] if self.is_template else self.template_parents
         if self.is_scoped:
-            return cpo_class(node).set_header(self.header).set_scope(self).handle(node)
-        return cpo_class(node).set_header(self.header).set_scope(self.scope).handle(node)
+            return cpo_class(node).add_template_parents(tparents).set_header(self.header).set_scope(self).handle(node)
+        return cpo_class(node).add_template_parents(tparents)\
+                .set_header(self.header).set_scope(self.scope).handle(node)
 
 
 

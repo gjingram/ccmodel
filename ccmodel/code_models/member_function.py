@@ -3,7 +3,7 @@ import typing
 import re
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject
+from .parse_object import ParseObject, replace_template_params
 from .function import FunctionObject
 from .types import ClassType
 from ..rules import code_model_map as cmm
@@ -33,12 +33,15 @@ class MemberFunctionObject(FunctionObject):
         self.original_cpp_object = True
         self.displayname = (self.displayname + " const") if self.is_const else \
                 self.displayname
+        self.scoped_displayname = (self.scoped_displayname + " const") if self.is_const else \
+                self.scoped_displayname
 
         return
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'MemberFunctionObject':
 
+        replace_template_params(self)
         FunctionObject.is_member(self, True)
         FunctionObject.handle(self, node)
 
@@ -69,5 +72,5 @@ class MemberFunctionObject(FunctionObject):
         return self
 
     def mark_conversion(self, is_it: bool) -> 'MemberFunctionObject':
-        self.is_conversion(is_it)
+        self.is_conversion = is_it
         return self
