@@ -16,6 +16,7 @@ class MemberObject(VariableObject):
         
         self.access_specifier = node.access_specifier
         self.original_cpp_object = True
+        self.determine_scope_name(node)
 
         return
 
@@ -24,7 +25,7 @@ class MemberObject(VariableObject):
         replace_template_params(self)
         self.scoped_id = self.scope.scoped_id + "::" + self.id
         self.scoped_displayname = self.scope.scoped_displayname + "::" + self.id
-        is_member = True
+        self.member = True
         VariableObject.handle(self, node)
         return self
 

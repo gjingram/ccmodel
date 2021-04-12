@@ -30,6 +30,7 @@ class MemberFunctionObject(FunctionObject):
         self.is_final = False
         self.is_override = False
 
+        self.determine_scope_name(node)
         self.original_cpp_object = True
         self.displayname = (self.displayname + " const") if self.is_const else \
                 self.displayname

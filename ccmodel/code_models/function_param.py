@@ -20,6 +20,7 @@ class FunctionParamObject(ParseObject):
         self.anonymous = False
 
         self.original_cpp_object = True
+        self.determine_scope_name(node)
 
         return
 

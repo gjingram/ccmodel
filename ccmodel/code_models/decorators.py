@@ -14,11 +14,14 @@ def if_handle(method):
 
         if self.do_handle(node):
             indented = False            
-            if not (self.header.header_file, self.line_number, self.scoped_id) in ccm_cfg.object_registry:
+            if not (self.header.header_file, self.line_number, self.scoped_id) in \
+                    ccm_cfg.object_registry:
                 ccm_cfg.indenting_formatter.indent_level += 1
                 indented = True
-                self.object_logger.info('Parsing line: {} -- {}'.format(self.line_number, self.scoped_id))
-                ccm_cfg.object_registry.append((self.header.header_file, self.line_number, self.scoped_id))
+                self.object_logger.info('Parsing line: {} -- {}'.format(self.line_number,
+                    self.scoped_id))
+                ccm_cfg.object_registry.append((self.header.header_file, self.line_number,
+                    self.scoped_id))
 
             out = method(self, node)
           
@@ -32,7 +35,7 @@ def if_handle(method):
     return _if_handle
 
 def add_obj_to_header_summary(id_use: str, obj: 'ParseObject') -> None:
-    if obj.header is not None:
+    if obj.header is not None and not obj.is_anonymous:
         try:
             header_add_fn = obj.header.header_add_fns[obj.kind]
             header_add_fn(obj)
@@ -55,7 +58,10 @@ def append_cpo(method):
         if obj is None:
             return None
 
-        add_obj_to_header_summary(obj.scoped_displayname, obj)
+        id_use = obj.scoped_displayname
+        if obj.id == "GlobalNamespace":
+            id_use = "GlobalNamespace"
+        add_obj_to_header_summary(id_use, obj)
         
         return obj
 

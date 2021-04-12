@@ -19,7 +19,8 @@ class NamespaceObject(ParseObject):
             self.displayname = 'GlobalNamespace'
             self.id = 'GlobalNamespace'
             self.scoped_id = 'GlobalNamespace'
-            self.namespace_scope = None
+            self.scoped_displayname = 'GlobaleNamespace'
+            self.scope = None
             self.kind = cindex.CursorKind.NAMESPACE
 
         self.header = None
@@ -49,6 +50,9 @@ class NamespaceObject(ParseObject):
         self.all_objects = []
 
         self._is_class = False
+
+        self.is_namespace = True
+        self.determine_scope_name(node)
 
         return
 
@@ -132,7 +136,8 @@ class NamespaceObject(ParseObject):
 
         ParseObject.handle(self, node)
 
-        tparents = [*self.template_parents, self.template_ref] if self.is_template else self.template_parents
+        tparents = [*self.template_parents, self.template_ref] if \
+                self.is_template else self.template_parents
 
         for child in node.get_children():
 

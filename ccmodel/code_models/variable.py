@@ -12,11 +12,11 @@ class VariableObject(ParseObject):
     def __init__(self, node: cindex.Cursor, force: bool = False):
         ParseObject.__init__(self, node, force)
 
-        self.storage_class = node.storage_class
-        self.type = node.type.spelling
+        self.storage_class = node.storage_class.name
         self.attr = None
-        self._is_member = False
-        self.constness = 'const' in self.type
+        self.member = False
+        self.const = node.type.is_const_qualified()
+        self.determine_scope_name(node)
 
         return
 
@@ -33,14 +33,9 @@ class VariableObject(ParseObject):
 
         return self
 
-    @property
     def is_member(self, isIt: bool) -> 'VariableObject':
-        self._is_member = isIt
+        self.member = isIt
         return self
-
-    @is_member.getter
-    def is_member(self) -> bool:
-        return self._is_member
 
     def setattr(self, attr: str) -> None:
         self.attr = attr

@@ -14,6 +14,7 @@ class EnumConstDeclObject(ParseObject):
     def __init__(self, node: cindex.Cursor, force: bool = False):
         ParseObject.__init__(self, node, force)
         self.value = node.enum_value
+        self.determine_scope_name(node)
         return
 
     @if_handle

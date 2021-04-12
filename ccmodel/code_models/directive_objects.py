@@ -16,6 +16,8 @@ class DirectiveObject(ParseObject, metaclass=abc.ABCMeta):
         self.directive = ""
         self.directive_prefix = ""
 
+        self.determine_scope_name(node)
+
         return
 
     @abc.abstractmethod

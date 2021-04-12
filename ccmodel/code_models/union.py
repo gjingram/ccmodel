@@ -14,6 +14,7 @@ class UnionObject(ParseObject):
         ParseObject.__init__(self, node, force)
         self.union_fields = {}
         self.original_cpp_object = True
+        self.determine_scope_name(node)
         return
 
     @if_handle

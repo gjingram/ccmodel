@@ -5,8 +5,10 @@ import regex
 
 from .decorators import (if_handle, 
         append_cpo)
-from .parse_object import ParseObject, replace_template_params, split_template_list
-from .template_param import TemplateParamObject
+from .parse_object import (ParseObject, replace_template_params,
+        replace_template_params_str, split_bracketed_list)
+from .template_param import (TemplateParamObject,
+        re_type_param, re_nontype_param)
 from ..rules import code_model_map as cmm
 
 
@@ -29,6 +31,8 @@ class TemplateObject(ParseObject):
         self.primary_ref = None
         self._is_method_template = False
         self._is_function_template = False
+
+        self.determine_scope_name(node)
 
         return
 
@@ -63,10 +67,16 @@ class TemplateObject(ParseObject):
             else:
                 continue
 
-        self.scoped_displayname = self.scoped_id + f"<{','.join([x.param for x in self.template_parameters])}>"
+        self.scoped_displayname = self.scoped_id + \
+                f"<{','.join([x.param for x in self.template_parameters])}>"
         for child_node, param in zip(node_children, self.template_parameters):
             param.scoped_displayname = self.scoped_displayname + "::" + param.id
             param.handle(child_node)
+
+        self.scoped_displayname = replace_template_params_str(
+                self.scoped_displayname,
+                [self]
+                )
 
         tparents = [*self.template_parents, self]
         if self.scoped_id in cmm.object_code_models:
@@ -136,15 +146,10 @@ class TemplateObject(ParseObject):
         return
 
 template_decl = r"\btemplate\s*<(?P<t_arglist>.*)>(?=\s*(:{2})?\w)"
-template_type_param = r"(?P<template_def>^template\s*<(?P<t_arglist>\s*.*\s*)>)?\s*"
-template_type_param += r"(?:class|typename)\s*(?:\.{3}\s*)?(?P<name>\w*)(?:\s*=\s*(?P<default>.*$))?"
-template_nontype_param = r"(?P<type>\w*)\s*(?P<name>\w*)(?:\s*=\s*(?P<default>.*$))?"
 template_class = r"(?:class|struct)\s*(?P<cls_name>\w*)\s*<(?P<t_arglist>.*)>"
 template_alias = r"using\s*(?P<alias>\w*)\s*=\s*(?P<cls_name>\w*)\s*(?:<(?P<t_arglist>.*)>)?"
 
 re_template_decl = regex.compile(template_decl)
-re_type_param = regex.compile(template_type_param)
-re_nontype_param = regex.compile(template_nontype_param)
 re_template_class = regex.compile(template_class)
 re_template_alias = regex.compile(template_alias)
 
@@ -177,7 +182,7 @@ class PartialSpecializationObject(TemplateObject):
         return
 
     def process_template_paramlist(self, paramlist) -> None:
-        pmatches = split_template_list(paramlist)
+        pmatches = split_bracketed_list(paramlist)
         for pmatch in pmatches:
             tmatch = re_type_param.match(pmatch)
             ntmatch = re_nontype_param.match(pmatch)
@@ -195,7 +200,7 @@ class PartialSpecializationObject(TemplateObject):
         return
 
     def process_class_template_arglist(self, carglist) -> None:
-        amatches = split_template_list(carglist)
+        amatches = split_bracketed_list(carglist)
         for amatch in amatches:
             self._class_arglist.append(amatch.replace(' ', ''))
         return

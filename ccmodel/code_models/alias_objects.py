@@ -19,6 +19,8 @@ class AliasObject(ParseObject, metaclass=abc.ABCMeta):
         self.original_cpp_object = False
         self.alias_object = None
 
+        self.determine_scope_name(node)
+
         return
 
     @abc.abstractmethod

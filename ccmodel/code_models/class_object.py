@@ -32,6 +32,7 @@ class ClassObject(NamespaceObject):
 
         self._is_class = True
 
+        self.is_namespace = False
         if name is not None:
             self.id = name
             self.displayname = name

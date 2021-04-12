@@ -81,6 +81,7 @@ class HeaderObject(object):
             cindex.CursorKind.FIELD_DECL: self.header_add_class_member,
             cindex.CursorKind.CONSTRUCTOR: self.header_add_class_ctor,
             cindex.CursorKind.DESTRUCTOR: self.header_add_class_dtor,
+            cindex.CursorKind.CONVERSION_FUNCTION: self.header_add_class_conversion,
             cindex.CursorKind.CXX_METHOD: self.header_add_class_method,
             cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION: self.header_add_partial_spec
             }
@@ -147,7 +148,9 @@ class HeaderObject(object):
             po.dep_objs.append(self.header_add_object(self.base_namespace, ref_node))
         return dep_obj
 
-    def header_match_template_ref(self, qual: str, params: typing.Tuple[str]) -> typing.Optional['TemplateObject']:
+    def header_match_template_ref(self, qual: str,
+            params: typing.Tuple[str]) -> typing.Optional['TemplateObject']:
+
         if not qual in self.template_specializations:
             return None
         specializations = self.template_specializations[qual]
@@ -155,7 +158,7 @@ class HeaderObject(object):
         for spec_key in specializations.keys():
             if len(spec_key) == len(params):
                 possible_match_keys.append(list(spec_key))
-            elif len(params) > len(spec_key) and spec_key[-1].endswith("[~...]"):
+            elif len(params) > len(spec_key) and spec_key[-1].endswith("[#...]"):
                 possible_match_keys.append(list(spec_key))
             elif len(params) < len(spec_key):
                 start_list = copy.deepcopy(spec_key)
@@ -163,9 +166,9 @@ class HeaderObject(object):
                 end_is_variadic = False
                 for remain in spec_key[len(params):]:
                     default_val = re.param.search(remain).group('default')
-                    default = default_val is not None and default_val != "~" and \
-                            default_val != "~..."
-                    variadic = remain.endswith('[~...]')
+                    default = default_val is not None and default_val != "#" and \
+                            default_val != "#..."
+                    variadic = remain.endswith('[#...]')
                     default_or_variadic &= default or variadic
                 if default_or_variadic:
                     possible_match_keys.append(spec_key)
@@ -174,7 +177,7 @@ class HeaderObject(object):
         for pspec_idx, pspec_key in enumerate(match_copies):
             for param_idx, param in enumerate(param_copy):
                 if param_idx < len(pspec_key):
-                    if pspec_key[param_idx] == "~":
+                    if pspec_key[param_idx] == "#":
                         continue
                     elif pspec_key[param_idx] == param:
                         continue
@@ -185,7 +188,7 @@ class HeaderObject(object):
                             default = re.param.search(remain).group('default')
                             if default is not None:
                                 continue
-                            elif remain.endswith('...'):
+                            elif remain.endswith('[#...]'):
                                 continue
                             else:
                                 possible_match_keys.pop(pspec_idx)
@@ -194,19 +197,19 @@ class HeaderObject(object):
                     else:
                         possible_match_keys.pop(pspec_idx)
                         break
-                elif param_idx >= len(pspec_key) - 1 and pspec_key[-1].endswith('...'):
+                elif param_idx >= len(pspec_key) - 1 and pspec_key[-1].endswith('[#...]'):
                     continue
                 else:
                     possible_match_keys.pop(pspec_idx)
                     break 
         match = None
-        min_tildes = -1
+        min_pound = -1
         for pmatch in possible_match_keys:
-            if min_tildes < 0 or pmatch.count("~") < min_tildes:
+            if min_pound < 0 or pmatch.count("#") < min_pound:
                 match = specializations[tuple(pmatch)]
-                min_tildes = pmatch.count("~")
-                if pmatch[-1].endswith('...') and len(params) > len(pmatch):
-                    min_tiles += len(params) - len(pmatch) - 1
+                min_pound = pmatch.count("#")
+                if pmatch[-1].endswith('[#...]') and len(params) > len(pmatch):
+                    min_pound += len(params) - len(pmatch) - 1
         return match
 
     def header_add_object(self, scope: 'ParseObject', node: cindex.Cursor) -> ParseObject:

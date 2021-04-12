@@ -23,12 +23,14 @@ class FunctionObject(ParseObject):
         self.info['n_args'] = self.n_args
 
         self.info['args'] = {}
-        self._is_member = False
+        self.is_member = False
         self.is_template = False
         self.template_ref = None
         self.name = self.id
 
         self.original_cpp_object = True
+
+        self.determine_scope_name(node)
 
         return
 
@@ -44,7 +46,7 @@ class FunctionObject(ParseObject):
         return out
 
     def is_member(self, is_it: bool) -> 'FunctionObject':
-        self._is_member = is_it
+        self.is_member = is_it
         return self
 
     def set_template_ref(self, templ: 'TemplateObject') -> 'FunctionObject':
@@ -94,7 +96,7 @@ class FunctionObject(ParseObject):
                     if arg_list[argidx].spelling == '=':
                         param_var.set_default_value(arg_list[argidx+1].spelling)
 
-        if not self._is_member and not self.is_template:
+        if not self.is_member and not self.is_template:
             self.header.header_add_function(self)
 
         return self

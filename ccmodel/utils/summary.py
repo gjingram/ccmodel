@@ -21,7 +21,12 @@ def load_summary(summary_name: str, loc: str = os.getcwd()) -> Optional[Dict[str
 
     return summary_out
 
-def save_summary(summary: Dict[str, 'HeaderSummary'], summary_name: str, loc: str = os.getcwd()) -> None:
+def save_summary(summary: Dict[str, 'HeaderSummary'], summary_name: str,
+        loc: str = os.getcwd()) -> None:
+
+    pdb.set_trace()
+    if not os.path.exists(loc):
+        os.mkdir(loc)
     summary_path = os.path.join(loc, summary_name)
     with open(summary_path, 'wb') as summary_file:
         pickle.dump(summary, summary_file)
@@ -67,9 +72,9 @@ class HeaderSummary(object):
         self.identifier_map = {}
         self.usr_map = {}
 
-    def __getitem__(self, item: Tuple[str]) -> 'ParseObject':
-        if item[0].replace(' ', '') in self.identifier_map:
-            return self.get_usr(self.identifier_map[item[0]])
+    def __getitem__(self, item: str) -> 'ParseObject':
+        if item.replace(' ', '') in self.identifier_map:
+            return self.get_usr(self.identifier_map[item])
         return None
 
     def get_usr(self, usr: str) -> Optional['ParseObject']:
