@@ -26,12 +26,10 @@ class EnumObject(ParseObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         ParseObject.__init__(self, node, force)
-        
-        self.inherits_from = node.enum_type.spelling  # Not considered an object dependency -- "type" dependency
+        self.inherits_from = node.enum_type.spelling  # Not considered an object dependency
         self.is_scoped = node.is_scoped_enum()
+        self.determine_scope_name(node)
         self.fields = {}
-
-        self.original_cpp_object = True
 
         return
 
@@ -48,7 +46,7 @@ class EnumObject(ParseObject):
         return self
 
     def add_enum_field(self, obj: 'EnumConstDeclObject') -> None:
-        self.fields[obj.id] = obj.value
+        self.fields[obj.id] = obj
         return
 
     def get_parent_class(self) -> str:
