@@ -24,7 +24,6 @@ def load_summary(summary_name: str, loc: str = os.getcwd()) -> Optional[Dict[str
 def save_summary(summary: Dict[str, 'HeaderSummary'], summary_name: str,
         loc: str = os.getcwd()) -> None:
 
-    pdb.set_trace()
     if not os.path.exists(loc):
         os.mkdir(loc)
     summary_path = os.path.join(loc, summary_name)
@@ -73,8 +72,9 @@ class HeaderSummary(object):
         self.usr_map = {}
 
     def __getitem__(self, item: str) -> 'ParseObject':
-        if item.replace(' ', '') in self.identifier_map:
-            return self.get_usr(self.identifier_map[item])
+        item_ns = item.replace(' ', '')
+        if item_ns in self.identifier_map:
+            return self.get_usr(self.identifier_map[item_ns])
         return None
 
     def get_usr(self, usr: str) -> Optional['ParseObject']:
@@ -82,9 +82,12 @@ class HeaderSummary(object):
             return self.usr_map[usr]
         return None
 
-    def add_obj_to_summary_maps(self, id_use: str, obj: 'ParseObject') -> None:
-        self.identifier_map[id_use.replace(' ', '')] = obj.usr
-        self.usr_map[obj.usr] = obj
+    def add_obj_to_summary_maps(self, obj: 'ParseObject') -> None:
+        id_use = obj["scoped_displayname"]
+        self.identifier_map[id_use.replace(' ', '')] = obj["usr"]
+        self.usr_map[obj["usr"]] = obj
+        if not obj in self.all_objects:
+            self.all_objects.append(obj)
         return
 
     def name_in_summary(self, name: str) -> bool:
