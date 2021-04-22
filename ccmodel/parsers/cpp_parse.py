@@ -19,16 +19,32 @@ _index = clang_cfg.clang.cindex.Index.create()
 
 class ClangParseCpp(object):
 
-    def __init__(self, working_dir: str = os.getcwd(), save_dir: str = os.getcwd(), unit_name: str = ""):
+    def __init__(self, working_dir: str = os.getcwd(), save_dir: str = os.getcwd(),
+            unit_name: str = ""):
         self.unit_name = unit_name if unit_name != "" else working_dir.split(os.sep)[-1]
         self.working_directory_path = working_dir
         self.headers = []
         self.exclude_names = []
+        self.parse_also = {}
         self.compiler_args = ""
-        self.out_dir = self.working_directory_path if save_dir == "" else os.path.join(self.working_directory_path,
+        self.out_dir = self.working_directory_path if save_dir == "" \
+                else os.path.join(self.working_directory_path,
                 save_dir)
-        pdb.set_trace()
         self.headers_parsed = {}
+        return
+
+    def parse_this(self, scoped_id: str) -> None:
+        pdb.set_trace()
+        id_parts = scoped_id.split("::")
+        for part_idx in range(0, len(id_parts)-1):
+            self.parse_also["::".join(id_parts[:part_idx+1])] = {
+                    "force_search": True,
+                    "force_parse": False
+                    }
+        self.parse_also[scoped_id] = {
+                "force_search": False,
+                "force_parse": True
+                }
         return
 
     def add_header(self, header: str) -> None:
@@ -117,7 +133,7 @@ class ClangParseCpp(object):
                                                           diag.spelling)
 
             if diag.severity == clang_cfg.clang.cindex.Diagnostic.Warning:
-                raise RuntimeWarning(diag_msgs)
+                raise RuntimeWarning(diag_msg)
 
             if diag.severity >= clang_cfg.clang.cindex.Diagnostic.Error:
                 raise RuntimeError(diag_msg)
