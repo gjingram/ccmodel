@@ -14,7 +14,7 @@ ClangParseCpp = cppp.ClangParseCpp
 
 @pytest.mark.test_parse
 class TestCCModelParse(CCModelTest):
-    parse_state = ParseHeader("parse_test.hh", "parse_test")
+    parse_state = ParseHeader("parse_test.hh", "parse_test", ["std::vector"])
   
     def test_header_in_state(cls_type, lps):
         assert cls_type.parse_state.test_file_abs in lps
@@ -23,12 +23,12 @@ class TestCCModelParse(CCModelTest):
         summary = lps[cls_type.parse_state.test_file_abs]
 
         pdb.set_trace()
-        print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")
+        print(*[x + " " + type(y).__name__ + os.linesep for x, y in summary.identifier_map.items()])
         expected_keys = [
                 "GlobalNamespace",
                 "testEnum1",
-                "testEnum1::A",
-                "testEnum1::B",
+                "A",
+                "B",
                 "testEnum2",
                 "testEnum2::A",
                 "testEnum2::B",
@@ -55,13 +55,12 @@ class TestCCModelParse(CCModelTest):
                 "ttNamespace1",
                 ":USING: using std::vector",
                 "std::vector<#, #>",
-                ":USING: using namespace testNamespace1::testNamespace2",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>::O",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>::A",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>::n",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>::b",
-                "testTemplateFunction<#, #, size_t#, size_t[1], [#...]>::var",
+                ":USINGNAMESPACE: using namespace testNamespace1::testNamespace2",
+                "testTemplateFunction(#&)::O",
+                "testTemplateFunction(#&)::A",
+                "testTemplateFunction(#&)::n",
+                "testTemplateFunction(#&)::b",
+                "testTemplateFunction(#&)::var",
                 "testTemplateFunction(#&)::classIn",
                 "testTemplateFunction(#&)",
                 "TestCStruct",
@@ -80,28 +79,36 @@ class TestCCModelParse(CCModelTest):
                 "TestCppClass::TestCppClass(double)::param0",
                 "TestCppClass::~TestCppClass()",
                 "TestCppClass::testMethod1(TestCppClass &) const",
-                "TestCppClass::testMethod1(TestCppClass &)::param0",
+                "TestCppClass::testMethod1(TestCppClass &) const::param0",
                 "TestCppClass::testMethod2(float)",
                 "TestCppClass::testMethod2(float)::param0",
                 "TestCppClass::testMethod3()",
                 "TestCppClass::t",
                 "TestCppClass::testMethod1()",
                 "TestTemplateClass1<#, #>",
-                "TestTemplateClass1<#, #>::TestTemplateClass1()",
-                "TestTemplateClass1<#, #>::~TestTemplateClass1()",
+                "TestTemplateClass1<#, #>::A",
+                "TestTemplateClass1<#, #>::B",
+                "TestTemplateClass1<#, #>::TestTemplateClass1<#, #>()",
+                "TestTemplateClass1<#, #>::~TestTemplateClass1<#, #>()",
                 "TestTemplateClass1<#, #>::testMethod3()",
-                "TestTemplateClass1<#, #>::testMethod4<#>(#&)",
+                "TestTemplateClass1<#, #>::testMethod4(#&)",
+                "TestTemplateClass1<#, #>::testMethod4(#&)::T",
+                "TestTemplateClass1<#, #>::testMethod4(#&)::param0",
                 "TestTemplateClass1<#, #>::testMethod5(#&)",
-                "TestTemplateClass1<#>",
-                "TestTemplateClass1<#>::TestTemplateClass1()",
-                "TestTemplateClass1<#>::~TestTemplateClass1()",
-                "TestTemplateClass1<#>::test_spec_func()",
+                "TestTemplateClass1<#, #>::testMethod5(#&)::param0",
+                "TestTemplateClass1<#, std::vector<float>>",
+                "TestTemplateClass1<#, std::vector<float>>::A",
+                "TestTemplateClass1<#, std::vector<float>>::" + \
+                        "TestTemplateClass1<#, std::vector<float>>()",
+                "TestTemplateClass1<#, std::vector<float>>::" + \
+                        "~TestTemplateClass1<#, std::vector<float>>()",
+                "TestTemplateClass1<#, std::vector<float>>::test_spec_func()",
                 "testPartial<#>",
+                "testPartial<#>::C",
                 "TestCppClass2",
                 "TestTemplateClass1<float, double>",
-                "TestTemplateClass1",
-                "TestCppClass2::TestCppClass2",
-                "TestCppClass2::~TestCppClass2"
+                "TestCppClass2::TestCppClass2()",
+                "TestCppClass2::~TestCppClass2()"
                 ]
         pdb.set_trace()
         for key in expected_keys:

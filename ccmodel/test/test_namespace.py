@@ -8,7 +8,7 @@ from .common import (ParseHeader, CCModelTest)
 
 @pytest.mark.test_namespace
 class TestCCModelNamespace(CCModelTest):
-    parse_state = ParseHeader("namespace_test.hh", "namespace_test")
+    parse_state = ParseHeader("namespace_test.hh", "namespace_test", [])
 
     def test_parse_objects_exist(cls_type, lps):
         summary = lps[cls_type.parse_state.test_file_abs]
