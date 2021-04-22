@@ -3,7 +3,7 @@ import typing
 import pdb
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject, replace_template_params
+from .parse_object import ParseObject
 from .variable import VariableObject
 from ..rules import code_model_map as cmm
 
@@ -13,21 +13,18 @@ class MemberObject(VariableObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         VariableObject.__init__(self, node, force)
-        
-        self.access_specifier = node.access_specifier
-        self.original_cpp_object = True
-        self.determine_scope_name(node)
+        self.info["access_specifier"] = node.access_specifier.name if node is not None else ""
+        self["member"] = True
+        if node is not None:
+            self.determine_scope_name(node)
 
         return
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'MemberObject':
-        replace_template_params(self)
-        self.scoped_id = self.scope.scoped_id + "::" + self.id
-        self.scoped_displayname = self.scope.scoped_displayname + "::" + self.id
-        self.member = True
+        if self["scope"] and not self["scope"]["export_to_scope"] and \
+                node.semantic_parent.spelling == "":
+            self["scoped_id"] = "::".join([self["scope"]["scoped_id"], self["id"]])
+            self["scoped_displayname"] = "::".join([self["scope"]["scoped_displayname"], self["id"]])
         VariableObject.handle(self, node)
         return self
-
-    def get_access_specifier(self) -> cindex.AccessSpecifier:
-        return self.access_specifier

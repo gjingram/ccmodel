@@ -2,6 +2,7 @@ from clang import cindex, enumerations
 import typing
 import os
 import copy
+import regex
 import pdb
 
 from ..__config__ import clang_config as ccm_cc
@@ -16,7 +17,8 @@ from .member import MemberObject
 from .function import FunctionObject
 from .function_param import FunctionParamObject
 from .member_function import MemberFunctionObject
-from .template import TemplateObject
+from .template import (TemplateObject,
+        PartialSpecializationObject)
 from .template_param import TemplateParamObject, re_param
 from .enumeration import EnumObject, EnumConstDeclObject
 from .comment_object import CommentObject
@@ -25,6 +27,7 @@ from .alias_objects import TypeDefObject, \
 from .directive_objects import UsingNamespaceObject, \
         UsingDeclarationObject
 from ..utils import summary
+from ..utils.code_utils import re_targlist
 from ..rules import code_model_map as cmm
 
 cindex = ccm_cc.clang.cindex
@@ -34,56 +37,50 @@ HeaderSummary = summary.HeaderSummary
 class HeaderObject(object):
 
     
-    def __init__(self, node: cindex.Cursor, header_file: str, parser: "illuminate.parsers.cpp_parse.ClangCppParse"):
+    def __init__(self, node: cindex.Cursor,
+            header_file: str, parser: "illuminate.parsers.cpp_parse.ClangCppParse"):
         
         self.header_file = header_file
         self.directory = os.path.join(*header_file.split(os.sep)[:-1])
-
         self.base_namespace = NamespaceObject(None)
-
         self.unit_includes = []
         self.extern_includes = []
         self.comments = []
         self.parser = parser
         self.n_objs = 0
-
         self.summary = HeaderSummary()
         self.summary.file = self.header_file
         self.summary.path = self.directory
-
         self.get_last_modified_time()
-
-        self.header_add_namespace(self.base_namespace)
-
         self.hash_registry = []
 
         self.header_add_fns = {
-            cindex.CursorKind.TYPEDEF_DECL: self.header_add_typedef,
-            cindex.CursorKind.TYPE_ALIAS_DECL: self.header_add_typedef,
-            cindex.CursorKind.NAMESPACE_ALIAS: self.header_add_namespace_alias,
-            cindex.CursorKind.TYPE_ALIAS_TEMPLATE_DECL: self.header_add_template_alias,
-            cindex.CursorKind.CLASS_DECL: self.header_add_class,
-            cindex.CursorKind.STRUCT_DECL: self.header_add_class,
-            cindex.CursorKind.USING_DIRECTIVE: self.header_add_using_namespace,
-            cindex.CursorKind.USING_DECLARATION: self.header_add_using_decl,
-            cindex.CursorKind.ENUM_DECL: self.header_add_enum,
-            cindex.CursorKind.FUNCTION_DECL: self.header_add_function,
-            cindex.CursorKind.NAMESPACE: self.header_add_namespace,
-            cindex.CursorKind.CLASS_TEMPLATE: self.header_add_template_class,
-            cindex.CursorKind.FUNCTION_TEMPLATE: self.header_add_template_function,
-            cindex.CursorKind.UNION_DECL: self.header_add_union,
-            cindex.CursorKind.VAR_DECL: self.header_add_variable,
-            cindex.CursorKind.PARM_DECL: self.header_add_fn_param,
-            cindex.CursorKind.ENUM_CONSTANT_DECL: self.header_add_enum_decl,
-            cindex.CursorKind.TEMPLATE_TEMPLATE_PARAMETER: self.header_add_template_template_param,
-            cindex.CursorKind.TEMPLATE_TYPE_PARAMETER: self.header_add_template_type_param,
-            cindex.CursorKind.TEMPLATE_NON_TYPE_PARAMETER: self.header_add_template_non_type_param,
-            cindex.CursorKind.FIELD_DECL: self.header_add_class_member,
-            cindex.CursorKind.CONSTRUCTOR: self.header_add_class_ctor,
-            cindex.CursorKind.DESTRUCTOR: self.header_add_class_dtor,
-            cindex.CursorKind.CONVERSION_FUNCTION: self.header_add_class_conversion,
-            cindex.CursorKind.CXX_METHOD: self.header_add_class_method,
-            cindex.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION: self.header_add_partial_spec
+            "TYPEDEF_DECL": self.header_add_typedef,
+            "TYPE_ALIAS_DECL": self.header_add_typedef,
+            "NAMESPACE_ALIAS": self.header_add_namespace_alias,
+            "TYPE_ALIAS_TEMPLATE_DECL": self.header_add_template_alias,
+            "CLASS_DECL": self.header_add_class,
+            "STRUCT_DECL": self.header_add_class,
+            "USING_DIRECTIVE": self.header_add_using_namespace,
+            "USING_DECLARATION": self.header_add_using_decl,
+            "ENUM_DECL": self.header_add_enum,
+            "FUNCTION_DECL": self.header_add_function,
+            "NAMESPACE": self.header_add_namespace,
+            "CLASS_TEMPLATE": self.header_add_template_class,
+            "FUNCTION_TEMPLATE": self.header_add_template_function,
+            "UNION_DECL": self.header_add_union,
+            "VAR_DECL": self.header_add_variable,
+            "PARM_DECL": self.header_add_fn_param,
+            "ENUM_CONSTANT_DECL": self.header_add_enum_decl,
+            "TEMPLATE_TEMPLATE_PARAMETER": self.header_add_template_template_param,
+            "TEMPLATE_TYPE_PARAMETER": self.header_add_template_type_param,
+            "TEMPLATE_NON_TYPE_PARAMETER": self.header_add_template_non_type_param,
+            "FIELD_DECL": self.header_add_class_member,
+            "CONSTRUCTOR": self.header_add_class_ctor,
+            "DESTRUCTOR": self.header_add_class_dtor,
+            "CONVERSION_FUNCTION": self.header_add_class_conversion,
+            "CXX_METHOD": self.header_add_class_method,
+            "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION": self.header_add_partial_spec
             }
 
         self.template_specializations = {}
@@ -109,9 +106,9 @@ class HeaderObject(object):
         return hash_in in self.hash_registry
 
     def register_object(self, cpo: ParseObject) -> None:
-        if not self.in_registry(cpo.hash):
-            self.hash_registry.append(cpo.hash)
-            cpo.parse_id = self.n_objs
+        if not self.in_registry(cpo["hash"]):
+            self.hash_registry.append(cpo["hash"])
+            cpo["parse_id"] = self.n_objs
             self.n_objs += 1
         return
 
@@ -128,8 +125,8 @@ class HeaderObject(object):
         return None
 
     def header_extend_dep(self, dep_obj: 'ParseObject', obj: 'ParseObject') -> None:
-        for dep in dep_obj.dep_objs:
-            obj.dep_objs.append(dep.definition)
+        for dep in dep_obj.dependencies:
+            obj.dependencies.append(dep.definition)
             self.header_extend_dep(dep, obj)
         return
 
@@ -140,12 +137,25 @@ class HeaderObject(object):
             ref_node = child if test_node is None else test_node
         else:
             ref_node = child
-        dep_obj = self.get_usr(ref_node.get_usr())
 
+        dep_obj = None
+        if ref_node == child:
+            po_tmp = ParseObject(ref_node)
+            match_template = re_targlist.match(po_tmp["displayname"])
+            if match_template and "t_arglist" in match_template.groupdict() and \
+                    match_template.groupdict()["t_arglist"] is not None:
+                try_template = self.header_match_template_ref(
+                        po_tmp["scoped_id"],
+                        match_template.groupdict()["t_arglist"].replace(' ', '').split(','))
+                if try_template is not None:
+                    dep_obj = try_template
+        if dep_obj is None:
+            dep_obj = self.get_usr(ref_node.get_usr())
         if dep_obj is not None:
-            po.dep_objs.append(dep_obj)
+            po["dependencies"].append(dep_obj)
         else:
-            po.dep_objs.append(self.header_add_object(self.base_namespace, ref_node))
+            dep_obj = self.header_add_object(self.base_namespace, ref_node)
+            po["dependencies"].append(dep_obj)
         return dep_obj
 
     def header_match_template_ref(self, qual: str,
@@ -165,11 +175,11 @@ class HeaderObject(object):
                 default_or_variadic = True
                 end_is_variadic = False
                 for remain in spec_key[len(params):]:
-                    default_val = re.param.search(remain).group('default')
-                    default = default_val is not None and default_val != "#" and \
-                            default_val != "#..."
-                    variadic = remain.endswith('[#...]')
-                    default_or_variadic &= default or variadic
+                    default_type = re_param.search(remain).group('default')
+                    default = default_type is not None and default_type != "#" and \
+                            default_type != "#..."
+                    variadic = remain == '[#...]'
+                    default_or_variadic &= (default or variadic)
                 if default_or_variadic:
                     possible_match_keys.append(spec_key)
         match_copies = copy.deepcopy(possible_match_keys)
@@ -177,15 +187,15 @@ class HeaderObject(object):
         for pspec_idx, pspec_key in enumerate(match_copies):
             for param_idx, param in enumerate(param_copy):
                 if param_idx < len(pspec_key):
-                    if pspec_key[param_idx] == "#":
+                    if pspec_key[param_idx].endswith("#"):
                         continue
                     elif pspec_key[param_idx] == param:
                         continue
-                    elif re_param.search(param).group('default') == pspec_key[param_idx]:
+                    elif re_param.search(pspec_key[param_idx]).groupdict()["default"] is not None:
                         continue
                     elif param_idx == len(params) - 1:
                         for remain in pspec_key[param_idx:]:
-                            default = re.param.search(remain).group('default')
+                            default = re_param.search(remain).group('default')
                             if default is not None:
                                 continue
                             elif remain.endswith('[#...]'):
@@ -197,7 +207,7 @@ class HeaderObject(object):
                     else:
                         possible_match_keys.pop(pspec_idx)
                         break
-                elif param_idx >= len(pspec_key) - 1 and pspec_key[-1].endswith('[#...]'):
+                elif param_idx >= len(pspec_key) - 1 and pspec_key[-1] == "[#...]":
                     continue
                 else:
                     possible_match_keys.pop(pspec_idx)
@@ -205,116 +215,156 @@ class HeaderObject(object):
         match = None
         min_pound = -1
         for pmatch in possible_match_keys:
-            if min_pound < 0 or pmatch.count("#") < min_pound:
+            pound_cnt = 0
+            for p in pmatch:
+                if "#" in p:
+                    pound_cnt += 1
+            if min_pound < 0 or pound_cnt < min_pound:
                 match = specializations[tuple(pmatch)]
-                min_pound = pmatch.count("#")
+                min_pound = pound_cnt
                 if pmatch[-1].endswith('[#...]') and len(params) > len(pmatch):
                     min_pound += len(params) - len(pmatch) - 1
+
+        inst_candidate = True
+        for param in params:
+            inst_candidate &= "#" not in param
+        if inst_candidate:
+            match = match.instantiate(params)
         return match
 
+    def header_add_unknown(self, obj: 'ParseObject') -> None:
+        self.summary.all_objects.append(obj)
+        return
+
     def header_add_object(self, scope: 'ParseObject', node: cindex.Cursor) -> ParseObject:
-        model = cmm.default_code_models[node.kind]
-        obj = model(node, True).set_header(self).handle(node)
-        self.header_add_fns[node.kind](obj)
-        self.summary.usr_map[obj.usr] = obj
-        self.summary.identifier_map[obj.scoped_id] = obj.usr
+        temp = self.get_usr(node.get_usr())
+        if temp:
+            return temp
+        model = None
+        add_fn = None
+        try:
+            model = cmm.default_code_models[node.kind]
+            add_fn = self.header_add_fns[node.kind.name]
+        except KeyError:
+            model = ParseObject
+            add_fn = self.header_add_unknown
+        scope_use = self.base_namespace
+        try:
+            scope_use = self.get_usr(node.semantic_parent.get_usr())
+        except:
+            pass
+        parent = node.semantic_parent
+        tparents = []
+        while parent is not None and parent.kind != cindex.CursorKind.TRANSLATION_UNIT:
+            if parent.kind == cindex.CursorKind.FUNCTION_TEMPLATE or \
+                    parent.kind == cindex.CursorKind.CLASS_TEMPLATE:
+                try:
+                    temp = self.get_usr(parent.get_usr())
+                    tparents.append(temp)
+                except KeyError:
+                    pass
+            parent = parent.semantic_parent
+        obj = model(node, force=True).set_header(self).set_scope(scope_use)\
+                .add_template_parents(tparents).handle(node)
+        self.summary.add_obj_to_summary_maps(obj)
         return obj
 
     def header_add_class(self, _class: ClassObject) -> None:
-        self.summary.all_objects.append(_class)
-        self.summary.classes.append(_class)
+        if not _class in self.summary.classes:
+            self.summary.classes.append(_class)
         return
 
     def header_add_class_member(self, member: MemberObject) -> None:
-        self.summary.all_objects.append(member)
-        self.summary.class_members.append(member)
+        if not member in self.summary.class_members:
+            self.summary.class_members.append(member)
         return
 
     def header_add_class_ctor(self, ctor: MemberFunctionObject) -> None:
         self.header_add_class_conversion(ctor)
-        self.summary.all_objects.append(ctor)
-        self.summary.class_ctors.append(ctor)
+        if not ctor in self.summary.class_ctors:
+            self.summary.class_ctors.append(ctor)
         return
 
     def header_add_class_dtor(self, dtor: MemberFunctionObject) -> None:
-        self.summary.all_objects.append(dtor)
-        self.summary.class_dtors.append(dtor)
+        if not dtor in self.summary.class_dtors:
+            self.summary.class_dtors.append(dtor)
         return
 
     def header_add_class_method(self, method: MemberFunctionObject) -> None:
         self.header_add_class_conversion(method)
-        self.summary.all_objects.append(method)
-        self.summary.class_methods.append(method)
+        if not method in self.summary.class_methods:
+            self.summary.class_methods.append(method)
         return
 
     def header_add_class_conversion(self, method: MemberFunctionObject) -> None:
-        if method.is_conversion or method.converting_ctor:
-            self.summary.class_conversions.append(method)
+        if method["is_conversion"] or method["is_converting_ctor"]:
+            if not method in self.summary.class_conversions:
+                self.summary.class_conversions.append(method)
         return
 
     def header_add_using_namespace(self, uns: UsingNamespaceObject) -> None:
-        self.summary.all_objects.append(uns)
-        self.summary.using.append(uns)
+        if not uns in self.summary.using:
+            self.summary.using.append(uns)
         return
 
     def header_add_using_decl(self, udecl: UsingDeclarationObject) -> None:
-        self.summary.all_objects.append(udecl)
-        self.summary.using.append(udecl)
+        if not udecl in self.summary.using:
+            self.summary.using.append(udecl)
         return
 
     def header_add_namespace(self, namespace: NamespaceObject) -> None:
-        self.summary.all_objects.append(namespace)
-        self.summary.namespaces.append(namespace)
+        if not namespace in self.summary.namespaces:
+            self.summary.namespaces.append(namespace)
         return
 
     def header_add_union(self, union: UnionObject) -> None:
-        self.summary.all_objects.append(union)
-        self.summary.unions.append(union)
+        if not union in self.summary.unions:
+            self.summary.unions.append(union)
         return
 
     def header_add_variable(self, var: VariableObject) -> None:
-        self.summary.all_objects.append(var)
-        self.summary.variables.append(var)
+        if not var in self.summary.variables:
+            self.summary.variables.append(var)
         return
 
     def header_add_function(self, func: FunctionObject) -> None:
-        self.summary.all_objects.append(func)
-        self.summary.functions.append(func)
+        if not func in self.summary.functions:
+            self.summary.functions.append(func)
         return
 
     def header_add_template_class(self, temp: TemplateObject) -> None:
-        self.summary.all_objects.append(temp)
-        self.summary.template_classes.append(temp)
+        if not temp in self.summary.template_classes:
+            self.summary.template_classes.append(temp)
         return
 
     def header_add_template_function(self, tfunc: TemplateObject) -> None:
-        self.summary.all_objects.append(tfunc)
-        self.summary.template_functions.append(tfunc)
+        if not tfunc in self.summary.template_functions:
+            self.summary.template_functions.append(tfunc)
         return
 
     def header_add_template_template_param(self, ttparam: TemplateParamObject) -> None:
-        self.summary.all_objects.append(ttparam)
-        self.summary.template_template_params.append(ttparam)
+        if not ttparam in self.summary.template_template_params:
+            self.summary.template_template_params.append(ttparam)
         return
 
     def header_add_template_type_param(self, ttparam: TemplateParamObject) -> None:
-        self.summary.all_objects.append(ttparam)
-        self.summary.template_type_params.append(ttparam)
+        if not ttparam in self.summary.template_type_params:
+            self.summary.template_type_params.append(ttparam)
         return
 
     def header_add_template_non_type_param(self, tntparam: TemplateParamObject) -> None:
-        self.summary.all_objects.append(tntparam)
-        self.summary.template_non_type_params.append(tntparam)
+        if not tntparam in self.summary.template_non_type_params:
+            self.summary.template_non_type_params.append(tntparam)
         return
 
     def header_add_partial_spec(self, partial: TemplateObject) -> None:
-        self.summary.all_objects.append(partial)
-        self.summary.partial_specializations.append(partial)
+        if not partial in self.summary.partial_specializations:
+            self.summary.partial_specializations.append(partial)
         return
 
     def header_add_fn_param(self, param: FunctionParamObject) -> None:
-        self.summary.all_objects.append(param)
-        self.summary.function_params.append(param)
+        if not param in self.summary.function_params:
+            self.summary.function_params.append(param)
         return
 
     def get_namespace_by_scoped_id(self, ns_id: str) -> typing.Union['NamespaceObject', None]:
@@ -324,28 +374,28 @@ class HeaderObject(object):
         return None
 
     def header_add_typedef(self, tdef: TypeDefObject) -> None:
-        self.summary.all_objects.append(tdef)
-        self.summary.typedefs.append(tdef)
+        if not tdef in self.summary.typedefs:
+            self.summary.typedefs.append(tdef)
         return
 
     def header_add_template_alias(self, t_alias: TemplateAliasObject) -> None:
-        self.summary.all_objects.append(t_alias)
-        self.summary.template_aliases.append(t_alias)
+        if not t_alias in self.summary.template_aliases:
+            self.summary.template_aliases.append(t_alias)
         return
 
     def header_add_namespace_alias(self, nalias: NamespaceAliasObject) -> None:
-        self.summary.all_objects.append(nalias)
-        self.summary.namespace_aliases.append(nalias)
+        if not nalias in self.summary.namespace_aliases:
+            self.summary.namespace_aliases.append(nalias)
         return
 
     def header_add_enum(self, enum: EnumObject) -> None:
-        self.summary.all_objects.append(enum)
-        self.summary.enumerations.append(enum)
+        if not enum in self.summary.enumerations:
+            self.summary.enumerations.append(enum)
         return
 
     def header_add_enum_decl(self, decl: EnumConstDeclObject) -> None:
-        self.summary.all_objects.append(decl)
-        self.summary.enum_fields.append(decl)
+        if not decl in self.summary.enum_fields:
+            self.summary.enum_fields.append(decl)
         return
 
     def get_header_file(self) -> str:

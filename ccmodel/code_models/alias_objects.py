@@ -5,33 +5,29 @@ import re
 import pdb
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject, replace_template_params
+from .parse_object import ParseObject
 from .template import PartialSpecializationObject
 from ..rules import code_model_map as cmm
 
 
 class AliasObject(ParseObject, metaclass=abc.ABCMeta):
 
-    def __init__(self, node: cindex.Cursor, force: bool = False):
-        ParseObject.__init__(self, node, force)
+    def __init__(self, node: cindex.Cursor, force_parse: bool = False):
+        ParseObject.__init__(self, node, force_parse)
 
-        self.alias = ""
-        self.original_cpp_object = False
-        self.alias_object = None
-
+        self.info["alias_name"] = ""
+        self.info["aliased_name"] = ""
+        self.info["aliased_usr"] = ""
+        self.info["aliased_object"] = None
+        self["is_alias"] = True
         self.determine_scope_name(node)
 
         return
 
     @abc.abstractmethod
     def handle(self, node: cindex.Cursor) -> 'AliasObject':
-        pass
-
-    def get_alias(self) -> str:
-        return self.alias
-
-    def get_using_string(self) -> str:
-        return "using " + self.scoped_id + " = " + self.alias + ";"
+        ParseObject.handle(self, node)
+        return
 
 
 @cmm.default_code_model(cindex.CursorKind.TYPEDEF_DECL)
@@ -39,30 +35,61 @@ class TypeDefObject(AliasObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         AliasObject.__init__(self, node, force)
-        alias_tmp = node.underlying_typedef_type.spelling
-        
-        self.alias = node.underlying_typedef_type.spelling
-
+        self.info["type_aliased"] = ""
         return
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'TypeDefObject':
-        for child in self.children(node, cindex.CursorKind.STRUCT_DECL):
+        children = []
+        self.extend_children(node, children)
+
+        structs_and_classes = self.children(children, cindex.CursorKind.STRUCT_DECL)
+        structs_and_classes.extend(self.children(children, cindex.CursorKind.CLASS_DECL))
+        for child in structs_and_classes:
             model = cmm.default_code_models[child.kind]
-            obj = model(child, force=True, name=self.get_name()).add_template_parents(self.template_parents)\
-                    .set_header(self.header)\
-                    .set_scope(self.scope).handle(child)
-            self.header.header_add_fns[child.kind](obj)
-            self.header.summary.identifier_map[obj.scoped_displayname] = obj.usr
-            self.header.summary.usr_map[obj.usr] = obj
-            return None
+            obj = None
+            if child.spelling == "":
+                obj = model(child, force=True, 
+                        name=self.get_name()).add_template_parents(self["template_parents"])\
+                        .set_header(self["header"])\
+                        .set_scope(self["scope"]).handle(child)
+            else:
+                obj = model(child, force=True).add_template_parents(self["template_parents"])\
+                        .set_header(self["header"]).set_scope(self["scope"])\
+                        .handle(child)
+            #self["header"].header_add_fns[child.kind.name](obj)
+            #self["header"].summary.identifier_map[obj["scoped_displayname"]] = obj["usr"]
+            #self["header"].summary.usr_map[obj["usr"]] = obj
+            
+            if child.spelling == "":
+                return None
 
-        ParseObject.handle(self, node)
-        for child in node.get_children():
-            if child.kind != cindex.CursorKind.NAMESPACE_REF:
-                self.header.header_get_dep(child, self)
+        AliasObject.handle(self, node)
+        underlying_decl = node.underlying_typedef_type.get_declaration()
+        if not underlying_decl.kind == cindex.CursorKind.NO_DECL_FOUND:
+            recursion_detected = False
+            parent = self["scope"]
+            while parent and parent["id"] != "GlobalNamespace":
+                if underlying_decl.spelling == parent["id"]:
+                    recursion_detected = True
+                    break
+                parent = parent["scope"]
+            if recursion_detected:
+                self["type_aliased"] = parent
+            else:
+                self["type_aliased"] = self["header"].header_get_dep(underlying_decl, self)
+            if self["type_aliased"] is None:
+                self["type_aliased"] = underlying_decl.spelling
+            self["alias_name"] = self["scoped_displayname"]
+            self["aliased_name"] = self["type_aliased"]["scoped_displayname"]
+            self["aliased_usr"] = underlying_decl.get_usr()
+        else:
+            self["type_aliased"] = node.underlying_typedef_type.spelling
+            self["alias_name"] = self["scoped_displayname"]
+            self["aliased_name"] = node.underlying_typedef_type.spelling
+            self["aliased_usr"] = node.underlying_typedef_type.spelling
+        self["aliased_object"] = self["type_aliased"]
 
-        self.header.header_add_typedef(self)
         return self
 
 
@@ -83,18 +110,23 @@ class NamespaceAliasObject(AliasObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         AliasObject.__init__(self, node, force)
+        self.info["namespace_aliased"] = ""
         return
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'NamespaceAliasObject':
-
         ParseObject.handle(self, node)
-        
-        for child in self.children(node, cindex.CursorKind.NAMESPACE_REF):
-            self.alias = child.spelling if self.alias == "" else self.alias + "::" + child.spelling
 
-        child = self.children(node, cindex.CursorKind.NAMESPACE_REF)[-1]
-        self.header.header_get_dep(child, self)
+        children = []
+        self.extend_children(node, children)
+    
+        for child in self.children(children, cindex.CursorKind.NAMESPACE_REF):
+            self["aliased_name"] = child.spelling if self["aliased_name"] == "" else \
+                    self["aliased_name"] + "::" + child.spelling
+
+        child = self.children(children, cindex.CursorKind.NAMESPACE_REF)[-1]
+        self.info["namespace_aliased"] = self["header"].header_get_dep(child, self)
+        self.info["alias_name"] = self["scoped_displayname"]
 
         return self
 
@@ -105,14 +137,13 @@ class TemplateAliasObject(TypeAliasObject, PartialSpecializationObject):
     def __init__(self, node: cindex.Cursor, force: bool = False):
         TypeAliasObject.__init__(self, node, force)
         PartialSpecializationObject.__init__(self, node, force)
-        self.is_alias = True
+        self["is_alias"] = True
         return
 
     @if_handle
     @append_cpo
     def handle(self, node: cindex.Cursor) -> 'TemplateAliasObject':
 
-        replace_template_params(self)
         PartialSpecializationObject.handle(self, node)
 
         return self

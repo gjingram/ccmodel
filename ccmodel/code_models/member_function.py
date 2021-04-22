@@ -1,11 +1,11 @@
 from clang import cindex, enumerations
 import typing
-import re
+import pdb
 
 from .decorators import if_handle, append_cpo
-from .parse_object import ParseObject, replace_template_params
+from .parse_object import ParseObject
 from .function import FunctionObject
-from .types import ClassType
+from .types import class_type
 from ..rules import code_model_map as cmm
 
 
@@ -17,61 +17,78 @@ class MemberFunctionObject(FunctionObject):
 
     def __init__(self, node: cindex.Cursor, force: bool = False):
         FunctionObject.__init__(self, node, force)
-        
-        self.access_specifier = node.access_specifier
-        self.is_const = node.is_const_method()
-        self.is_ctor = False
-        self.is_dtor = False
-        self.is_conversion = False
-        self.converting_ctor = node.is_converting_constructor()
-        self.is_pure_virtual = node.is_pure_virtual_method()
-        self.is_static = node.is_static_method()
-        self.is_virtual = node.is_virtual_method()
-        self.is_final = False
-        self.is_override = False
-
-        self.determine_scope_name(node)
-        self.original_cpp_object = True
-        self.displayname = (self.displayname + " const") if self.is_const else \
-                self.displayname
-        self.scoped_displayname = (self.scoped_displayname + " const") if self.is_const else \
-                self.scoped_displayname
+       
+        self.info["access_specifier"] = node.access_specifier.name if node is not None else ""
+        self.info["is_const"] = node.is_const_method() if node is not None else False
+        self.info["is_ctor"] = False
+        self.info["is_dtor"] = False
+        self.info["is_conversion"] = False
+        self.info["is_converting_ctor"] = node.is_converting_constructor() if node is not None else \
+                False
+        self.info["is_pure_virtual"] = node.is_pure_virtual_method() if node is not None else \
+                False
+        self.info["is_virtual"] = node.is_virtual_method() if node is not None else False
+        self.info["is_static"] = node.is_static_method() if node is not None else False
+        self.info["is_final"] = False
+        self.info["is_override"] = False
+        if node is not None:
+            self.determine_scope_name(node)
+        self["displayname"] = (self["displayname"] + " const") if self["is_const"] else \
+                self["displayname"]
+        self["scoped_displayname"] = (self["scoped_displayname"] + " const") if \
+                self["is_const"] else \
+                self["scoped_displayname"]
 
         return
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> 'MemberFunctionObject':
 
-        replace_template_params(self)
-        FunctionObject.is_member(self, True)
+        self["is_member"] = True
         FunctionObject.handle(self, node)
+        
+        if self["is_ctor"] or self["is_dtor"]:
+            self["id"] = self["scope"]["id"]
+            self["displayname"] = self["scope"]["displayname"] + \
+                    "(" + \
+                    f"{', '.join([x['type'] for x in self['params'].values()])}" + \
+                    ")"
+            if self["is_dtor"]:
+                self["id"] = "~" + self["id"]
+                self["displayname"] = "~" + self["displayname"]
+            self["scoped_id"] = "::".join([self["scope"]["scoped_id"], self["id"]])
+            self["scoped_displayname"] = "::".join([self["scope"]["scoped_displayname"],
+                self["displayname"]])
 
-        if self.is_pure_virtual:
-            self.scope.set_class_type(ClassType.ABSTRACT)
-        elif self.is_virtual:
-            self.scope.set_class_type(ClassType.VIRTUAL)
+        if not self["is_template"]:
+            ParseObject.handle(self, node)
+
+        children = []
+        self.extend_children(node, children)
+
+        if self["is_pure_virtual"]:
+            self["scope"].set_class_type(class_type["ABSTRACT"])
+        elif self["is_virtual"]:
+            self["scope"].set_class_type(class_type["VIRTUAL"])
         else:
-            self.scope.set_class_type(ClassType.CONCRETE)
+            self["scope"].set_class_type(class_type["CONCRETE"])
 
-        for child in node.get_children():
-            if child.kind == cindex.CursorKind.CXX_FINAL_ATTR and not self.is_final:
-                self.is_final = True
-            if child.kind == cindex.CursorKind.CXX_OVERRIDE_ATTR and not self.is_override:
-                self.is_override = True
+        for child in children:
+            if child.kind == cindex.CursorKind.CXX_FINAL_ATTR and not self["is_final"]:
+                self["is_final"] = True
+            if child.kind == cindex.CursorKind.CXX_OVERRIDE_ATTR and not self["is_override"]:
+                self["is_override"] = True
 
         return self
 
-    def get_access_specifier(self) -> int:
-        return self.access_specifier
-
     def mark_ctor(self, is_it: bool) -> 'MemberFunctionObject':
-        self.is_ctor = is_it
+        self["is_ctor"] = is_it
         return self
 
     def mark_dtor(self, is_it: bool) -> 'MemberFunctionObject':
-        self.is_dtor = is_it
+        self["is_dtor"] = is_it
         return self
 
     def mark_conversion(self, is_it: bool) -> 'MemberFunctionObject':
-        self.is_conversion = is_it
+        self["is_conversion"] = is_it
         return self
