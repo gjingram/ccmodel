@@ -3,21 +3,25 @@ import typing
 import pdb
 import copy
 
-from .decorators import (if_handle, 
-        append_cpo)
+from .decorators import if_handle, append_cpo
 from .parse_object import ParseObject
 from .namespace import NamespaceObject
 from .member import MemberObject
 from .member_function import MemberFunctionObject
 from .types import class_type
 from ..rules import code_model_map as cmm
+from ..parsers import cpp_parse as parser
 
 
 @cmm.default_code_model(cindex.CursorKind.CLASS_DECL)
 @cmm.default_code_model(cindex.CursorKind.STRUCT_DECL)
 class ClassObject(NamespaceObject):
-
-    def __init__(self, node: cindex.Cursor, force: bool = False, name: typing.Optional[str] = None):
+    def __init__(
+        self,
+        node: typing.Optional[cindex.Cursor] = None,
+        force: bool = False,
+        name: typing.Optional[str] = None,
+    ):
         NamespaceObject.__init__(self, node, force)
 
         self.info["base_classes"] = {}
@@ -43,103 +47,128 @@ class ClassObject(NamespaceObject):
 
         return
 
-    def set_template_ref(self, templ: 'TemplateObject') -> 'ClassObject':
+    def set_template_ref(self, templ: "TemplateObject") -> "ClassObject":
         self["is_template"] = True
         self["template_ref"] = templ
         return self
 
-    @if_handle
-    def handle(self, node: cindex.Cursor) -> 'ClassObject':
-        NamespaceObject.handle(self, node)
-      
-        if not self["is_template"] and not self["is_union"]:
-            ParseObject.handle(self, node)
-
-        children = []
-        self.extend_children(node, children)
+    def process_child(self, child: cindex.Cursor) -> typing.Optional["ParseObject"]:
+        out = NamespaceObject.process_child(self, child)
+        if out:
+            return out
 
         tparents = self["template_parents"]
         scope_use = self["scope"] if self["export_to_scope"] else self
+
+        # Resolve parent ClassObject when creating module links
+        if child.kind == cindex.CursorKind.CXX_BASE_SPECIFIER:
+            self.add_class_parent_type(child)
+            return None
+
+        if child.kind == cindex.CursorKind.CONSTRUCTOR:
+            header_use = parser.get_header(child.location.file.name)
+            cpo_class = self.get_child_type(child)
+            ctor = cpo_class(child, self["force_parse"])
+            ctor.add_template_parents(tparents).set_header(
+                header_use
+            ).set_scope(scope_use).add_active_namespaces(self.active_namespaces)\
+                    .add_active_directives(self.active_using_directives)\
+                    .set_parse_level(self["parse_level"])\
+                    .mark_ctor(True).do_handle(child)
+            if ctor.no_decl:
+                return None
+            self.add_class_constructor(ctor)
+            if ctor["is_converting_ctor"]:
+                self.add_class_conversion_function(ctor)
+            return ctor
+
+        if child.kind == cindex.CursorKind.DESTRUCTOR:
+            header_use = parser.get_header(child.location.file.name)
+            cpo_class = self.get_child_type(child)
+            dtor = cpo_class(child, self["force_parse"])
+            dtor.add_template_parents(tparents).set_header(
+                header_use
+            ).set_scope(scope_use).add_active_namespaces(self.active_namespaces)\
+                    .add_active_directives(self.active_using_directives)\
+                    .set_parse_level(self["parse_level"])\
+                    .mark_dtor(True).do_handle(child)
+            if dtor.no_decl:
+                return None
+            self.add_class_destructor(dtor)
+            return dtor
+
+        if child.kind == cindex.CursorKind.CXX_METHOD:
+            meth = self.create_clang_child_object(child)
+            if not meth.do_handle(child):
+                return None
+            self.add_function(meth)
+            return meth
+
+        if child.kind == cindex.CursorKind.CONVERSION_FUNCTION:
+            conv = self.create_clang_child_object(child)
+            conv.mark_conversion(True)
+            if conv.no_decl:
+                return None
+            self.add_class_conversion_function(conv)
+            return conv
+
+        if child.kind == cindex.CursorKind.CXX_FINAL_ATTR and not self["is_final"]:
+            self["is_final"] = True
+
+        return None
+
+    @if_handle
+    def handle(self, node: cindex.Cursor) -> "ClassObject":
+        NamespaceObject.handle(self, node)
+
+        children = []
+        self.extend_children(node, children)
         for child in children:
-
-            # Resolve parent ClassObject when creating module links
-            if child.kind == cindex.CursorKind.CXX_BASE_SPECIFIER:
-                self.add_class_parent_type(child)
-                continue
-
-            if child.kind == cindex.CursorKind.CONSTRUCTOR:
-                cpo_class = self.get_child_type(child)
-                ctor = cpo_class(child, self["force_parse"])
-                if ctor is None:
-                    continue
-                ctor.add_template_parents(tparents).set_header(self["header"])\
-                        .set_scope(scope_use)\
-                        .mark_ctor(True)\
-                        .handle(child)
-                self.add_class_constructor(ctor)
-                if ctor["is_converting_ctor"]:
-                    self.add_class_conversion_function(ctor)
-                continue
-
-            if child.kind == cindex.CursorKind.DESTRUCTOR:
-                cpo_class = self.get_child_type(child)
-                dtor = cpo_class(child, self["force_parse"])
-                if dtor is None:
-                    continue
-                dtor.add_template_parents(tparents).set_header(self["header"])\
-                        .set_scope(scope_use)\
-                        .mark_dtor(True)\
-                        .handle(child)
-                self.add_class_destructor(dtor)
-                continue
-
-            if child.kind == cindex.CursorKind.CXX_METHOD:
-                meth = self.create_clang_child_object(child)
-                if meth is None:
-                    continue
-                self.add_function(meth)
-                continue
-
-            if child.kind == cindex.CursorKind.CONVERSION_FUNCTION:
-                conv = self.create_clang_child_object(child)
-                if conv is None:
-                    continue
-                conv.mark_conversion(True)
-                self.add_class_conversion_function(conv)
-                continue
-
-            if child.kind == cindex.CursorKind.CXX_FINAL_ATTR and not self["is_final"]:
-                self["is_final"] = True
+            child_obj = self.process_child(child)
+            if child_obj is not None:
+                child_obj.handle(child)
 
         self.extend_with_inheritance()
         return self
 
     def add_class_parent_type(self, class_in: cindex.CursorKind) -> None:
         base = self["header"].header_get_dep(class_in, self)
-        got_base = False
-        
-        try:
-            base = base["aliased_object"]
-            got_base = True
-        except KeyError:
-            pass
-        try:
-            if not got_base:
-                base = base["object"]
-                got_base = True
-        except KeyError:
-            pass
 
-        if base is None:
-            base = class_in.spelling
-        base_append = {
-                "access_specifier": class_in.access_specifier.name,
-                "base_class": base
-                }
+        if base and type(base) is not str:
+            while (
+                    "aliased_object" in base.info or
+                    "object" in base.info
+            ):
+                if "aliased_object" in base.info:
+                    base = base["aliased_object"]
+                    if type(base) is str:
+                        break
+                if "object" in base.info:
+                    base = base["object"]
+                    if type(base) is str:
+                        break
+
         if type(base) is str:
-            self.info["base_classes"][class_in.displayname] = base_append
+            base = (
+                    ClassObject(class_in, False)
+                    .add_template_parents(self["template_parents"])
+                    .set_header(self["header"])
+                    .set_scope(self)
+                    .add_active_namespaces(self.active_namespaces)
+                    .add_active_directives(self.active_using_directives)
+                    .set_parse_level(self["parse_level"])
+                    .do_handle(class_in)
+            )
+        base_append = {
+            "access_specifier": class_in.access_specifier.name,
+            "base_class": base,
+        }
+
+
+        if type(base) is str:
+            self["base_classes"][class_in.displayname] = base_append
         else:
-            self.info["base_classes"][base["displayname"]] = base_append
+            self["base_classes"][base["displayname"]] = base_append
         return
 
     def extend_with_inheritance(self) -> None:
@@ -150,15 +179,19 @@ class ClassObject(NamespaceObject):
             if type(base) is str:
                 return
             for func in base["functions"].values():
-                if func["id"] == "operator=" or \
-                        func["is_ctor"] or \
-                        func["is_dtor"] or \
-                        func["access_specifier"] == "PRIVATE":
+                if (
+                    func["id"] == "operator="
+                    or func["is_ctor"]
+                    or func["is_dtor"]
+                    or func["access_specifier"] == "PRIVATE"
+                ):
                     continue
                 if func["displayname"] in self["functions"]:
                     continue
                 func_use = copy.copy(func)
+                func_use["inherited"] = True
                 self._route_inheritance_by_access_spec(spec, func_use)
+                func_use.update_class_type(self)
                 self["functions"][func_use["displayname"]] = func_use
             for cfunc in base["conversion_functions"].values():
                 if cfunc["id"] == "operator=":
@@ -168,7 +201,9 @@ class ClassObject(NamespaceObject):
                 if cfunc["access_specifier"] == "PRIVATE":
                     continue
                 cfunc_use = copy.copy(cfunc)
+                cfunc_use["inherited"] = True
                 self._route_inheritance_by_access_spec(spec, cfunc_use)
+                cfunc_use.update_class_type(self)
                 self["conversion_functions"][cfunc_use["displayname"]] = cfunc_use
             self._route_inheritance_by_kw("class_templates", base, spec)
             self._route_inheritance_by_kw("partial_specializations", base, spec)
@@ -186,45 +221,56 @@ class ClassObject(NamespaceObject):
             self._distant_ancestor_recurse(base, self["distant_ancestors"])
         return
 
-    def _distant_ancestor_recurse(self, base: 'ClassObject', da_array: typing.List[str]) -> None:
+    def _distant_ancestor_recurse(
+        self, base: "ClassObject", da_array: typing.List[str]
+    ) -> None:
+
         if len(base["base_classes"]) > 0:
             for base_distant in base["base_classes"].values():
                 base._distant_ancestor_recurse(base_distant["base_class"], da_array)
                 da_array.append(base_distant["base_class"]["scoped_displayname"])
         return
 
-    def _route_inheritance_by_kw(self, kw: str,
-            base: typing.Union['ClassObject', 'TemplateObject', 'AliasObject'],
-            spec: str) -> None:
+    def _route_inheritance_by_kw(
+        self,
+        kw: str,
+        base: typing.Union["ClassObject", "TemplateObject", "AliasObject"],
+        spec: str,
+    ) -> None:
         for obj in base[kw].values():
             if obj["displayname"] in self[kw]:
                 continue
             if obj["access_specifier"] == "PRIVATE":
                 continue
             obj_use = copy.copy(obj)
+            obj_use["inherited"] = True
             self._route_inheritance_by_access_spec(spec, obj_use)
             self[kw][obj_use["displayname"]] = obj_use
         return
 
-    def _route_inheritance_by_access_spec(self, spec: str, obj: 'ParseObject') -> None:
+    def _route_inheritance_by_access_spec(self, spec: str, obj: "ParseObject") -> None:
         if spec == "PROTECTED" and obj["access_specifier"] == "PUBLIC":
             obj["access_specifier"] = "PROTECTED"
         elif spec == "PRIVATE":
             obj["access_specifier"] = "PRIVATE"
         return
 
-    def add_class_constructor(self, ctor: 'MemberFunctionObject') -> None:
-        self.info["constructors"][ctor["displayname"]] = ctor
+    def add_class_constructor(self, ctor: "MemberFunctionObject") -> None:
+        self["all_objects"].append(ctor)
+        self["constructors"][ctor["displayname"]] = ctor
         if ctor["is_converting_ctor"]:
-            self.info["converting_constructors"][ctor["displayname"]] = ctor
+            self["converting_constructors"][ctor["displayname"]] = ctor
         return
 
-    def add_class_destructor(self, dtor: 'MemberFunctionObject') -> None:
-        self.info["destructors"][dtor["displayname"]] = dtor
+    def add_class_destructor(self, dtor: "MemberFunctionObject") -> None:
+        self["all_objects"].append(dtor)
+        self["destructors"][dtor["displayname"]] = dtor
         return
 
-    def add_class_conversion_function(self, conv: 'MemberFunctionObject') -> None:
-        self.info["conversion_functions"][conv["displayname"]] = conv
+    def add_class_conversion_function(self, conv: "MemberFunctionObject") -> None:
+        if not conv in self["all_objects"]:
+            self["all_objects"].append(conv)
+        self["conversion_functions"][conv["displayname"]] = conv
         return
 
     def set_class_type(self, type_in: int) -> None:
@@ -238,4 +284,4 @@ class ClassObject(NamespaceObject):
         return
 
     def get_parents(self) -> typing.Tuple[str]:
-        return self["base_classe"]
+        return self["base_classes"]

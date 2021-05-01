@@ -3,7 +3,7 @@ import os
 import pdb
 
 from typing import Dict
-from .common import (ParseHeader, CCModelTest)
+from .common import ParseHeader, CCModelTest
 
 
 @pytest.mark.test_variable
@@ -14,15 +14,7 @@ class TestCCModelVariable(CCModelTest):
         summary = lps[cls_type.parse_state.test_file_abs]
 
         print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")
-        expected = [
-                "var1",
-                "var2",
-                "var3",
-                "var4",
-                "var5",
-                "var6",
-                "var7"
-                ]
+        expected = ["var1", "var2", "var3", "var4", "var5", "var6", "var7"]
         for key in expected:
             assert summary.name_in_summary(key)
 

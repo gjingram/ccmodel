@@ -2,9 +2,9 @@ from clang import cindex
 
 from ..rules import code_model_map as cmm
 
+
 @cmm.default_code_model("comment")
 class CommentObject(object):
-
     def __init__(self, tok: cindex.Token):
         self.start_line_number = tok.extent.start.line
         self.end_line_number = tok.extent.end.line

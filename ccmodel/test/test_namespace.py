@@ -3,7 +3,7 @@ import os
 import pdb
 
 from typing import Dict
-from .common import (ParseHeader, CCModelTest)
+from .common import ParseHeader, CCModelTest
 
 
 @pytest.mark.test_namespace
@@ -16,11 +16,11 @@ class TestCCModelNamespace(CCModelTest):
         pdb.set_trace()
         print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")
         expected_keys = [
-                "GlobalNamespace",
-                "::TestAnonNested1",
-                "TestNamespace1",
-                "TestNested1",
-                "TestNested1::TestNested2"
-                ]
+            "GlobalNamespace",
+            "::TestAnonNested1",
+            "TestNamespace1",
+            "TestNested1",
+            "TestNested1::TestNested2",
+        ]
         for key in expected_keys:
             assert summary.name_in_summary(key)

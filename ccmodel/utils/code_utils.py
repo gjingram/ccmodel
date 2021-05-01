@@ -13,11 +13,13 @@ function_arglist += r"(?P<a_section>\((?P<f_arglist>.*)\)))"
 re_farglist = regex.compile(function_arglist)
 
 iso = r"[\<\[\({,]?\s*(?P<iso>(?:type-parameter-(?:.-.-?)*)"
-iso += r"|(?::{2})?\w\w*(?::{2}\w*)*)[\>\]\)},]?"
+iso += r"|\w*)\s*[\>\]\)},]?"
 re_iso = regex.compile(iso)
 
-def add_to_list(list_in: typing.List['ParseObject'], 
-        obj: typing.Any, check_instance: typing.Type) -> None:
+
+def add_to_list(
+    list_in: typing.List["ParseObject"], obj: typing.Any, check_instance: typing.Type
+) -> None:
     if isinstance(obj, check_instance):
         list_in.append(obj)
         return
@@ -27,43 +29,58 @@ def add_to_list(list_in: typing.List['ParseObject'],
                 list_in.append(elem)
             else:
                 raise RuntimeError(
-                        "Input object is expected to be an instance of {}".format(
-                            check_instance.__name__))
+                    "Input object is expected to be an instance of {}".format(
+                        check_instance.__name__
+                    )
+                )
         return
-    raise RuntimeError("Input object is expected to be an instance of {}".format(
-        check_instance.__name__))
+    raise RuntimeError(
+        "Input object is expected to be an instance of {}".format(
+            check_instance.__name__
+        )
+    )
 
 
-def get_relative_id(scope_node: 'cindex.Cursor',
-        obj_node: 'cindex.Cursor', start_name) -> str:
-    if scope_node is None or \
-            scope_node.kind == cindex.CursorKind.TRANSLATION_UNIT or scope_node is obj_node:
+def get_relative_id(
+    scope_node: "cindex.Cursor", obj_node: "cindex.Cursor", start_name
+) -> str:
+    if (
+        scope_node is None
+        or scope_node.kind == cindex.CursorKind.TRANSLATION_UNIT
+        or scope_node is obj_node
+    ):
         return start_name
     else:
-        return get_relative_id(scope_node, obj_node.semantic_parent, 
-                obj_node.spelling + "::" + start_name)
+        return get_relative_id(
+            scope_node, obj_node.semantic_parent, obj_node.spelling + "::" + start_name
+        )
 
-def replace_template_params(obj: 'ParseObject') -> None:
+
+def replace_template_params(obj: "ParseObject") -> None:
     if len(obj["template_parents"]) == 0:
         return
     obj["scoped_displayname"] = replace_template_params_str(
-            obj["scoped_displayname"],
-            obj["template_parents"])
+        obj["scoped_displayname"], obj["template_parents"]
+    )
     obj.template_params_replaced = True
     return
 
-def replace_template_params_str(rep_str: str, parents: typing.List['TemplateObject']) -> str:
+
+def replace_template_params_str(
+    rep_str: str, parents: typing.List["TemplateObject"]
+) -> str:
 
     if len(parents) == 0:
         return rep_str
 
     rparams = []
     for parent in parents:
-        rparams.extend([(x.get_name(), x["parameter"]) for x in \
-                parent["template_parameters"].values()])
-        for param in parent["template_parameters"].values():
-            if param["is_variadic"]:
-                rep_str.replace(f"{param['id']}...", f"{param['id']}")
+        rparams.extend(
+            [
+                (x.get_name(), x["parameter"])
+                for x in parent["template_parameters"].values()
+            ]
+        )
 
     replace_matches = []
     matches = re_iso.finditer(rep_str)
@@ -81,11 +98,15 @@ def replace_template_params_str(rep_str: str, parents: typing.List['TemplateObje
         end = rmatch[0].end("iso")
         len_rep = end - start
         len_sym = len(rmatch[1])
-        rep_str = rep_str[:(start-chars_removed)] + rmatch[1]  + \
-                rep_str[(end-chars_removed):]
-        chars_removed += (len_rep - len_sym)
+        rep_str = (
+            rep_str[: (start - chars_removed)]
+            + rmatch[1]
+            + rep_str[(end - chars_removed) :]
+        )
+        chars_removed += len_rep - len_sym
 
     return rep_str
+
 
 def split_bracketed_list(args_in: str, brack: str = "<>") -> typing.List[str]:
     bracket_level = 0
@@ -103,3 +124,46 @@ def split_bracketed_list(args_in: str, brack: str = "<>") -> typing.List[str]:
         str_buffer.append(char)
     out.append("".join(str_buffer).strip())
     return out
+
+def split_scope_list(scoped_name: str) -> typing.List[str]:
+    bracket_level = 0
+    str_buffer = []
+    out = []
+    name_len = len(scoped_name)
+    char_idx = 0
+    while char_idx < name_len-1:
+        char = scoped_name[char_idx]
+        charp1 = scoped_name[char_idx+1]
+        if bracket_level == 0 and char == ":" and charp1 == ":":
+            out.append("".join(str_buffer).strip())
+            char_idx += 2
+            str_buffer = []
+            continue
+        if char in ['<', '{', '(', '[']:
+            bracket_level += 1
+        if char in ['>', '}', ')', ']']:
+            bracket_level -= 1
+        str_buffer.append(char)
+        char_idx += 1
+    str_buffer.append(scoped_name[-1])
+    out.append("".join(str_buffer).strip())
+    return out
+
+def find_template_defs(string: str) -> typing.List[str]:
+    bracket_level = 0
+    str_buffer = []
+    out = []
+    for char in string:
+        str_buf_string = "".join(str_buffer)
+        if str_buf_string.startswith("template") and str_buf_string.endswith(">") and \
+                bracket_level == 0:
+            out.append(str_buf_string)
+            str_buffer = []
+            continue
+        if char == "<":
+            bracket_level += 1
+        if char == ">":
+            bracket_level -= 1
+        str_buffer.append(char)
+    return out
+

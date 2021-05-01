@@ -3,7 +3,7 @@ import os
 import pdb
 
 from typing import Dict
-from .common import (ParseHeader, CCModelTest)
+from .common import ParseHeader, CCModelTest
 
 
 @pytest.mark.test_union
@@ -15,16 +15,16 @@ class TestCCModelUnion(CCModelTest):
 
         pdb.set_trace()
         expected = [
-                "testUnion1",
-                "testUnion1::s1",
-                "testUnion1::s2",
-                "testUnion1::s3",
-                "testUnion1::s4",
-                "Nest1::Nest2::s1",
-                "Nest1::Nest2::s2",
-                "Nest1::Nest2::s3",
-                "Nest1::Nest2::s4"
-                ]
+            "testUnion1",
+            "testUnion1::s1",
+            "testUnion1::s2",
+            "testUnion1::s3",
+            "testUnion1::s4",
+            "Nest1::Nest2::s1",
+            "Nest1::Nest2::s2",
+            "Nest1::Nest2::s3",
+            "Nest1::Nest2::s4",
+        ]
         for exp in expected:
             assert summary.name_in_summary(exp)
 
@@ -94,7 +94,3 @@ class TestCCModelUnion(CCModelTest):
         assert u2s4["scoped_id"] == "Nest1::Nest2::s4"
         assert u2s4["scoped_displayname"] == "Nest1::Nest2::s4"
         assert u2s4["type"] == "bool"
-
-
-
- 

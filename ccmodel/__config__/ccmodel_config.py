@@ -6,20 +6,24 @@ from warnings import warn
 
 ccmodel_top = str(pathlib.Path(os.path.dirname(os.path.realpath(__file__))).parents[0])
 
+
 def log_parsed_objects(record):
     return record["extra"]["log_parsed"] and record["extra"]["logs_parses"]
+
 
 def log_object_dependencies(record):
     return record["extra"]["log_object_deps"] and record["extra"]["logs_object_deps"]
 
+
 def ccmodel_stage_log(record):
     return record["extra"]["stage_log"]
+
 
 ccmodel_stage_fmt = "ccmodel: {message}"
 ccmodel_common_fmt = "ccmodel: {extra[header]} -- {message}"
 
-class IndentingParseFormatter(object):
 
+class IndentingParseFormatter(object):
     def __init__(self):
         self.n_spaces = 3
         self.indent_level = 0
@@ -30,24 +34,33 @@ class IndentingParseFormatter(object):
         record["extra"]["indent"] = self.indent_level * self.n_spaces * " "
         return self.fmt
 
+
 indenting_formatter = IndentingParseFormatter()
 
 ccmodel_log_config = {
-        "handlers": [
-            {"sink": sys.stdout, "format": ccmodel_stage_fmt, "filter": ccmodel_stage_log},
-            {"sink": sys.stdout, "format": indenting_formatter.format, "filter": log_parsed_objects},
-            {"sink": sys.stdout, "format": indenting_formatter.format, "filter": log_object_dependencies},
-            ],
-        "extra": {
-            "header": "",
-            "indent": "",
-            "log_parsed": False,
-            "logs_parses": False,
-            "log_object_deps": False,
-            "logs_object_deps": False,
-            "stage_log": False
-            }
-        }
+    "handlers": [
+        {"sink": sys.stdout, "format": ccmodel_stage_fmt, "filter": ccmodel_stage_log},
+        {
+            "sink": sys.stdout,
+            "format": indenting_formatter.format,
+            "filter": log_parsed_objects,
+        },
+        {
+            "sink": sys.stdout,
+            "format": indenting_formatter.format,
+            "filter": log_object_dependencies,
+        },
+    ],
+    "extra": {
+        "header": "",
+        "indent": "",
+        "log_parsed": False,
+        "logs_parses": False,
+        "log_object_deps": False,
+        "logs_object_deps": False,
+        "stage_log": False,
+    },
+}
 
 log_parsed = False
 log_object_deps = False

@@ -27,6 +27,8 @@ regex = "^2021.4.4"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
 trashy-poetry = "^1.0.3"
+black = "^20.8b1"
+vulture = "^2.3"
 
 
 [build-system]

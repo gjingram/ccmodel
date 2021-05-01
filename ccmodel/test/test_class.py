@@ -3,7 +3,7 @@ import os
 import pdb
 
 from typing import Dict
-from .common import (ParseHeader, CCModelTest)
+from .common import ParseHeader, CCModelTest
 
 
 @pytest.mark.test_class
@@ -14,47 +14,47 @@ class TestCCModelClass(CCModelTest):
         summary = lps[cls_type.parse_state.test_file_abs]
 
         expected = [
-                "TestStruct1",
-                "TestStruct1::a1",
-                "TestStruct1::a2",
-                "TestStruct1::a3",
-                "TestStruct2",
-                "TestStruct2::a1",
-                "TestStruct2::a2",
-                "TestStruct2::a3",
-                "TestStruct2::TestStruct2()",
-                "TestStruct2::TestStruct2(int)",
-                "TestStruct2::~TestStruct2()",
-                "TestStruct2::testMethod1()",
-                "TestStruct2::testMethod2(std::string)",
-                "TestStruct2::testMethod3(int)",
-                "TestClass1",
-                "TestClass1::TestClass1()",
-                "TestClass1::TestClass1(double)",
-                "TestClass1::~TestClass1()",
-                "TestClass1::u1",
-                "TestClass1::u2",
-                "TestClass1::TEST_ENUM1",
-                "TestClass1::TEST_ENUM2",
-                "TestClass1::tdef_type::s1",
-                "TestClass1::tdef_type::s2",
-                "TestClass1::tdef_type",
-                "TestClass1::NestedClass1",
-                "TestClass1::NestedClass1::NestedClass1()",
-                "TestClass1::NestedClass1::~NestedClass1()",
-                "TestClass1::NestedClass1::n1",
-                "TestClass1::NestedClass1::testMethod1()",
-                "TestClass1::b1",
-                "TestClass1::b2",
-                "TestClass1::b3",
-                "TestClass1::testMethod4()",
-                "TestClass1::t1",
-                "TestClass1::t2",
-                "TestClass1::testMethod5(std::string, std::vector<double>&)",
-                "TestClass2",
-                "TestClass2::TestClass2()",
-                "TestClass2::~TestClass2()"
-                ]
+            "TestStruct1",
+            "TestStruct1::a1",
+            "TestStruct1::a2",
+            "TestStruct1::a3",
+            "TestStruct2",
+            "TestStruct2::a1",
+            "TestStruct2::a2",
+            "TestStruct2::a3",
+            "TestStruct2::TestStruct2()",
+            "TestStruct2::TestStruct2(int)",
+            "TestStruct2::~TestStruct2()",
+            "TestStruct2::testMethod1()",
+            "TestStruct2::testMethod2(std::string)",
+            "TestStruct2::testMethod3(int)",
+            "TestClass1",
+            "TestClass1::TestClass1()",
+            "TestClass1::TestClass1(double)",
+            "TestClass1::~TestClass1()",
+            "TestClass1::u1",
+            "TestClass1::u2",
+            "TestClass1::TEST_ENUM1",
+            "TestClass1::TEST_ENUM2",
+            "TestClass1::tdef_type::s1",
+            "TestClass1::tdef_type::s2",
+            "TestClass1::tdef_type",
+            "TestClass1::NestedClass1",
+            "TestClass1::NestedClass1::NestedClass1()",
+            "TestClass1::NestedClass1::~NestedClass1()",
+            "TestClass1::NestedClass1::n1",
+            "TestClass1::NestedClass1::testMethod1()",
+            "TestClass1::b1",
+            "TestClass1::b2",
+            "TestClass1::b3",
+            "TestClass1::testMethod4()",
+            "TestClass1::t1",
+            "TestClass1::t2",
+            "TestClass1::testMethod5(std::string, std::vector<double>&)",
+            "TestClass2",
+            "TestClass2::TestClass2()",
+            "TestClass2::~TestClass2()",
+        ]
         for exp in expected:
             assert summary.name_in_summary(exp)
 
@@ -127,7 +127,7 @@ class TestCCModelClass(CCModelTest):
         assert s2ctor1["scoped_displayname"] == "TestStruct2::TestStruct2()"
         assert s2ctor1["displayname"] in struct2["constructors"]
         assert s2ctor1["scope"] is struct2
-       
+
         s2ctor2 = summary["TestStruct2::TestStruct2(int)"]
         assert type(s2ctor2).__name__ == "MemberFunctionObject"
         assert s2ctor2["scoped_id"] == "TestStruct2::TestStruct2"
@@ -142,7 +142,7 @@ class TestCCModelClass(CCModelTest):
         assert s2dtor1["scoped_displayname"] == "TestStruct2::~TestStruct2()"
         assert s2dtor1["displayname"] in struct2["destructors"]
         assert s2dtor1["scope"] is struct2
-        
+
         s2m1 = summary["TestStruct2::testMethod1()"]
         assert type(s2m1).__name__ == "MemberFunctionObject"
         assert s2m1["scoped_id"] == "TestStruct2::testMethod1"
@@ -272,7 +272,9 @@ class TestCCModelClass(CCModelTest):
         assert type(nc1ctor1).__name__ == "MemberFunctionObject"
         assert nc1ctor1["id"] == "NestedClass1"
         assert nc1ctor1["scoped_id"] == "TestClass1::NestedClass1::NestedClass1"
-        assert nc1ctor1["scoped_displayname"] == "TestClass1::NestedClass1::NestedClass1()"
+        assert (
+            nc1ctor1["scoped_displayname"] == "TestClass1::NestedClass1::NestedClass1()"
+        )
         assert nc1ctor1["displayname"] in nc1["constructors"]
         assert nc1ctor1["scope"] is nc1
 
@@ -280,7 +282,10 @@ class TestCCModelClass(CCModelTest):
         assert type(nc1dtor1).__name__ == "MemberFunctionObject"
         assert nc1dtor1["id"] == "~NestedClass1"
         assert nc1dtor1["scoped_id"] == "TestClass1::NestedClass1::~NestedClass1"
-        assert nc1dtor1["scoped_displayname"] == "TestClass1::NestedClass1::~NestedClass1()"
+        assert (
+            nc1dtor1["scoped_displayname"]
+            == "TestClass1::NestedClass1::~NestedClass1()"
+        )
         assert nc1dtor1["displayname"] in nc1["destructors"]
         assert nc1dtor1["scope"] is nc1
 
@@ -362,8 +367,10 @@ class TestCCModelClass(CCModelTest):
         assert type(c1m5).__name__ == "MemberFunctionObject"
         assert c1m5["id"] == "testMethod5"
         assert c1m5["scoped_id"] == "TestClass1::testMethod5"
-        assert c1m5["scoped_displayname"] == \
-                "TestClass1::testMethod5(std::string, std::vector<double> &)"
+        assert (
+            c1m5["scoped_displayname"]
+            == "TestClass1::testMethod5(std::string, std::vector<double> &)"
+        )
         assert c1m5["return"] == "float"
         assert c1m5["access_specifier"] == "PRIVATE"
         assert c1m5["scope"] is class1
@@ -398,4 +405,3 @@ class TestCCModelClass(CCModelTest):
         c2base2 = class2["base_classes"]["TestClass1"]
         assert c2base2["base_class"] is class1
         assert c2base2["access_specifier"] == "PRIVATE"
-

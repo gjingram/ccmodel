@@ -1,141 +1,188 @@
-from clang import enumerations
-from typing import (Dict, List, Union)
+from clang import cindex, enumerations
+from typing import (
+    Dict,
+    List,
+    Union,
+    Optional
+)
 import os
 import graphlib
 import pdb
 
 from ..__config__ import clang_config as clang_cfg
 from ..__config__ import ccmodel_config as ccm_cfg
-from ..code_models import header
-from ..utils import summary
-
-HeaderSummary = summary.HeaderSummary
-HeaderObject = header.HeaderObject
-save_summary = summary.save_summary
-
+from ..utils import summary as sm
 from ..utils import file_sys as fs
+from ..utils.code_utils import (
+    split_scope_list
+)
 
 _index = clang_cfg.clang.cindex.Index.create()
 
-class ClangParseCpp(object):
+compiler_args = []
+exclude_names = []
+include_names = {}
+working_directory_path = ""
+save_dir = ""
+save_ext = ".ccms"
+unit_name = ""
+headers = []
+parse_also = {}
+headers_parsed = {}
+template_specializations = {}
 
-    def __init__(self, working_dir: str = os.getcwd(), save_dir: str = os.getcwd(),
-            unit_name: str = ""):
-        self.unit_name = unit_name if unit_name != "" else working_dir.split(os.sep)[-1]
-        self.working_directory_path = working_dir
-        self.headers = []
-        self.exclude_names = []
-        self.parse_also = {}
-        self.compiler_args = ""
-        self.out_dir = self.working_directory_path if save_dir == "" \
-                else os.path.join(self.working_directory_path,
-                save_dir)
-        self.headers_parsed = {}
-        return
+summary = sm.ParserSummary()
+summary.template_specializations = template_specializations
 
-    def parse_this(self, scoped_id: str) -> None:
-        pdb.set_trace()
-        id_parts = scoped_id.split("::")
-        for part_idx in range(0, len(id_parts)-1):
-            self.parse_also["::".join(id_parts[:part_idx+1])] = {
-                    "force_search": True,
-                    "force_parse": False
-                    }
-        self.parse_also[scoped_id] = {
-                "force_search": False,
-                "force_parse": True
-                }
-        return
+global_ns = None
 
-    def add_header(self, header: str) -> None:
-        self.headers.append(header)
-        return
+def set_working_directory(wd: Optional[str]) -> None:
+    global working_directory_path
+    working_directory_path = (
+            wd if wd is not None else os.get_cwd()
+    )
+    return
 
-    def set_headers(self, headers: List[str]) -> None:
-        self.headers = headers
-        return
+def set_save_extension(ext: str) -> None:
+    global save_ext
+    save_ext = ext
+    return
 
-    def set_compiler_args(self, args: List[str]) -> None:
-        self.compiler_args.extend(args)
-        return
+def global_namespace() -> "NamespaceObject":
+    global global_ns
+    if global_ns:
+        return global_ns
+    from ..code_models.namespace import NamespaceObject
+    global_ns = NamespaceObject(None)
+    return global_ns
 
-    def exclude(self, obj: str) -> None:
-        self.exclude_names.append(obj)
-        return
+def set_save_dir(sv: str) -> None:
+    global save_dir
+    save_dir = sv
+    return
 
-    def get_excludes(self) -> List[str]:
-        return self.exclude_names
+def set_unit_name(un: Optional[str]) -> None:
+    global unit_name
+    unit_name = (
+            un if un is not None else
+            working_directory_path.split(os.sep)[-1]
+    )
+    return
 
-    def _get_abspath(self, path_in: str) -> str:
-        if not type(path_in) is str:
-            raise RuntimeError(f"Input path {path_in} is not a string.")
-        return os.path.normpath(os.path.join(self.working_directory_path, path_in))
+def add_header(h: str) -> None:
+    headers.append(h)
+    return
 
-    def process_headers(self, headers: Union[None, str, List[str]]=None) -> None:
-        logger = ccm_cfg.logger.bind(stage_log=True)
-        logger.info(f'Processing headers for unit "{self.unit_name}".')
+def add_headers(hs: List[str]) -> None:
+    headers.extend(hs)
+    return
 
-        parse_headers = None
-        if headers is None:
-            parse_headers = self.headers
-        else:
-            parse_headers = headers
+def set_compiler_args(args: List[str]) -> None:
+    compiler_args.extend(args)
+    return
 
-        if type(parse_headers) is str:
-            self.headers = self._get_abspath(parse_headers)
-        elif type(parse_headers) is list:
-            self.headers = [self._get_abspath(x) for x in parse_headers]
-        else:
-            raise RuntimeError('HeaderObject.process_headers received non-string header names to process.')
+def exclude(scoped_id: str) -> None:
+    exclude_names.append(scoped_id)
+    return
 
-        header_topo_sort = graphlib.TopologicalSorter()
-        header_to_node = {}
+def excludes(scoped_ids: List[str]) -> None:
+    exclude_names.extend(scoped_ids)
+    return
 
-        for header in self.headers:
+def get_excludes() -> List[str]:
+    return exclude_names
+
+def include(scoped_id: str, acc_spec: str = "PROTECTED") -> None:
     
-            logger.info('Parsing header {} includes'.format(header))
-            raw_parse = _index.parse(header, args=self.compiler_args.split())
-            self.handle_diagnostics(raw_parse.diagnostics)
+    id_parts = split_scope_list(scoped_id)
+    for part_idx in range(len(id_parts)-1):
+        include_names["::".join(id_parts[:part_idx+1])] = {
+                "force_search": True,
+                "force_parse": False,
+                "access_specifier": acc_spec
+        }
+    include_names[scoped_id] = {
+            "force_search": False,
+            "force_parse": True,
+            "access_specifier": acc_spec
+    }
 
-            header_obj = HeaderObject(raw_parse.cursor, header, self)
-            header_obj.unit_headers = self.headers
-            self.headers_parsed[header] = header_obj
-            header_to_node[header_obj] = raw_parse.cursor
-            header_obj.handle_includes(raw_parse)
+    return
 
-            header_topo_sort.add(header)
-            for unit_header in header_obj.summary.unit_headers:
-                header_topo_sort.add(header, unit_header)
+def get_abspath(path_in: str) -> str:
+    if not type(path_in) is str:
+        raise RuntimeError(f"Input path {path_in} if not a string")
+    return os.path.normpath(os.path.join(working_directory_path, path_in))
+
+def process_headers(lheaders: Optional[Union[str, List[str]]] = None) -> None:
+    from ..code_models.header import HeaderObject
+    global headers
+
+    logger = ccm_cfg.logger.bind(stage_log=True)
+    logger.info(f'Processing headers for unit "{unit_name}"')
+
+    parse_headers = None
+    if lheaders is None:
+        parse_headers = headers
+    else:
+        parse_headers = lheaders
+
+    lheaders = None
+    if type(parse_headers) is str:
+        lheaders = get_abspath(parse_headers)
+    elif type(parse_headers) is list:
+        lheaders = [get_abspath(x) for x in parse_headers]
+    else:
+        raise RuntimeError(
+                "process_headers received non-string header names"
+        )
+
+    header_topo_sort = graphlib.TopologicalSorter()
+    header_to_node = {}
+
+    for header in lheaders:
+        logger.info(f"Parsing {header} includes")
+        pdb.set_trace()
+        raw_parse = _index.parse(header, args=compiler_args)
+        handle_diagnostics(raw_parse.diagnostics)
+
+        header_obj = HeaderObject(header)
+        header_obj.unit_headers = headers
+        headers_parsed[header] = header_obj
+        header_to_node[header_obj] = raw_parse.cursor
+        header_obj.handle_includes(raw_parse)
+
+        header_topo_sort.add(header)
+        for unit_header in header_obj.summary.unit_headers:
+            header_topo_sort.add(header, unit_header)
 
         header_deps = tuple(header_topo_sort.static_order())
-
-        save_dict = {}
         for ordered_header in header_deps:
-            proc_header = self.headers_parsed[ordered_header]            
+            proc_header = headers_parsed[ordered_header]
+            proc_header.handle_object = True
             proc_header.handle(header_to_node[proc_header])
-            save_dict[proc_header.header_file] = proc_header.summary
+            headers_parsed[proc_header.header_file] = proc_header.summary
 
-        pdb.set_trace()
-        self.save_all(save_dict)
-        
-        return
+    pdb.set_trace()
+    save_all(summary, save_ext)
+    return
 
-    def save_all(self, save_dict: Dict[str, 'HeaderSummary']) -> None:
-        return save_summary(save_dict, self.unit_name + ".ccms", self.out_dir) 
+def save_all(save_dict: Dict[str, "HeaderSummary"], ext: str) -> None:
+    return save_summary(save_dict, unit_name + save_ext, save_dir)
 
-    def handle_diagnostics(self, diags) -> None:
+def handle_diagnostics(diags) -> None:
 
-        for diag in diags:
+    for diag in diags:
+        diag_msg = f"{diag.location.file.name}\nline {diag.location.line} column {diag.location.column}\n{diag.spelling}"
+        if diag.severity == clang_cfg.clang.cindex.Diagnostic.Warning:
+            warn(diag_msg)
+        if diag.severity >= clang_cfg.clang.cindex.Diagnostic.Error:
+            raise RuntimeError(diag_msg)
+    return
 
-            diag_msg = "{}\nline {} column {}\n{}".format(str(diag.location.file),
-                                                          diag.location.line,
-                                                          diag.location.column,
-                                                          diag.spelling)
-
-            if diag.severity == clang_cfg.clang.cindex.Diagnostic.Warning:
-                raise RuntimeWarning(diag_msg)
-
-            if diag.severity >= clang_cfg.clang.cindex.Diagnostic.Error:
-                raise RuntimeError(diag_msg)
-
-        return
+def get_header(hfile: str) -> "HeaderObject":
+    if hfile in headers_parsed:
+        return headers_parsed[hfile]
+    from ..code_models.header import HeaderObject
+    headers_parsed[hfile] = HeaderObject(hfile)
+    return headers_parsed[hfile]

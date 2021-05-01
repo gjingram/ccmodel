@@ -3,7 +3,7 @@ import os
 import pdb
 
 from typing import Dict
-from .common import (ParseHeader, CCModelTest)
+from .common import ParseHeader, CCModelTest
 
 
 @pytest.mark.test_function
@@ -12,32 +12,32 @@ class TestCCModelFunction(CCModelTest):
 
     def test_parse_objects_exist(cls_type, lps):
         summary = lps[cls_type.parse_state.test_file_abs]
-   
+
         expected = [
-                "testFunction1()",
-                "testFunction2(double &)",
-                "testFunction2(double &)::param0",
-                "testFunction3(double, float)",
-                "testFunction3(double, float)::param0",
-                "testFunction3(double, float)::param1",
-                "testFunction3(double *, double **, float&)",
-                "testFunction3(double *, double **, float&)::param0",
-                "testFunction3(double *, double **, float&)::param1",
-                "testFunction3(double *, double **, float&)::param2",
-                "testFunction4(int)",
-                "testFunction4(int)::param0",
-                "testFunction5()",
-                "testFunction6(double)",
-                "testFunction6(double)::param0",
-                "testFunction7(float, float, float)",
-                "testFunction7(float, float, float)::a",
-                "testFunction7(float, float, float)::b",
-                "testFunction7(float, float, float)::c",
-                "Nest1",
-                "Nest1::testFunction8()",
-                "Nest1::Nest2",
-                "Nest1::Nest2::testFunction9()"
-                ]
+            "testFunction1()",
+            "testFunction2(double &)",
+            "testFunction2(double &)::param0",
+            "testFunction3(double, float)",
+            "testFunction3(double, float)::param0",
+            "testFunction3(double, float)::param1",
+            "testFunction3(double *, double **, float&)",
+            "testFunction3(double *, double **, float&)::param0",
+            "testFunction3(double *, double **, float&)::param1",
+            "testFunction3(double *, double **, float&)::param2",
+            "testFunction4(int)",
+            "testFunction4(int)::param0",
+            "testFunction5()",
+            "testFunction6(double)",
+            "testFunction6(double)::param0",
+            "testFunction7(float, float, float)",
+            "testFunction7(float, float, float)::a",
+            "testFunction7(float, float, float)::b",
+            "testFunction7(float, float, float)::c",
+            "Nest1",
+            "Nest1::testFunction8()",
+            "Nest1::Nest2",
+            "Nest1::Nest2::testFunction9()",
+        ]
         for exp in expected:
             assert summary.name_in_summary(exp)
 
@@ -83,21 +83,30 @@ class TestCCModelFunction(CCModelTest):
         func3_0_param0 = summary["testFunction3(double, float)::param0"]
         assert func3_0_param0["id"] == "param0"
         assert func3_0_param0["scoped_id"] == "testFunction3::param0"
-        assert func3_0_param0["scoped_displayname"] == "testFunction3(double, float)::param0"
+        assert (
+            func3_0_param0["scoped_displayname"]
+            == "testFunction3(double, float)::param0"
+        )
         assert func3_0_param0["usr"] == "testFunction3(double, float)::param0"
         assert func3_0_param0["type"] == "double"
 
         func3_0_param1 = summary["testFunction3(double, float)::param1"]
         assert func3_0_param1["id"] == "param1"
         assert func3_0_param1["scoped_id"] == "testFunction3::param1"
-        assert func3_0_param1["scoped_displayname"] == "testFunction3(double, float)::param1"
+        assert (
+            func3_0_param1["scoped_displayname"]
+            == "testFunction3(double, float)::param1"
+        )
         assert func3_0_param1["usr"] == "testFunction3(double, float)::param1"
         assert func3_0_param1["type"] == "float"
 
         func3_1 = summary["testFunction3(double *, double **, float&)"]
         assert func3_1["id"] == "testFunction3"
         assert func3_1["scoped_id"] == "testFunction3"
-        assert func3_1["scoped_displayname"] == "testFunction3(double *, double **, float &)"
+        assert (
+            func3_1["scoped_displayname"]
+            == "testFunction3(double *, double **, float &)"
+        )
         assert func3_1["return"] == "void"
         assert func3_1["storage_class"] == "NONE"
         assert func3_1["linkage"] == "EXTERNAL"
@@ -185,5 +194,3 @@ class TestCCModelFunction(CCModelTest):
         assert func9["linkage"] == "EXTERNAL"
         assert func9["n_params"] == 0
         assert func9["type"] == "double ()"
-
-

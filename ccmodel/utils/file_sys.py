@@ -4,8 +4,8 @@ import typing
 import traceback
 import functools
 
-class cd(object):
 
+class cd(object):
     def __init__(self, cd_to):
         self._cwd = os.getcwd()
         self._go_to = cd_to
@@ -22,20 +22,26 @@ class cd(object):
         return
 
 
-def get_files_by_ext(ext: str, dir_in: str=os.getcwd(), include_hidden=False) -> typing.List[str]:
+def get_files_by_ext(
+    ext: str, dir_in: str = os.getcwd(), include_hidden=False
+) -> typing.List[str]:
 
     with cd(dir_in):
         if not include_hidden:
-            out = [ext_file for ext_file in os.listdir() if ext_file.endswith(ext) and not ext_file.startswith(".")]
+            out = [
+                ext_file
+                for ext_file in os.listdir()
+                if ext_file.endswith(ext) and not ext_file.startswith(".")
+            ]
         else:
             out = [ext_file for ext_file in os.listdir() if ext_file.endswith(ext)]
 
     return out
 
-def in_pkg_dir(method):
 
+def in_pkg_dir(method):
     @functools.wraps(method)
-    def _in_pkg_dir(object_in: 'IlluminatePackage', *args, **kwargs):
+    def _in_pkg_dir(object_in: "IlluminatePackage", *args, **kwargs):
         out = None
         with cd(object_in.illuminate_pkg_abspath):
             out = method(object_in, *args, **kwargs)
@@ -43,4 +49,3 @@ def in_pkg_dir(method):
         return out
 
     return _in_pkg_dir
-
