@@ -18,10 +18,10 @@ class TestCCModelParse(CCModelTest):
     parse_state = ParseHeader("parse_test.hh", "parse_test", ["std::vector"])
 
     def test_header_in_state(cls_type, lps):
-        assert cls_type.parse_state.test_file_abs in lps
+        assert cls_type.parse_state.test_file_abs in lps.headers
 
     def test_parse_objects_exist(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         print(
             *[
@@ -61,13 +61,13 @@ class TestCCModelParse(CCModelTest):
             ":USING: using std::vector",
             "std::vector<#, #>",
             ":USINGNAMESPACE: using namespace testNamespace1::testNamespace2",
-            "testTemplateFunction(#&)::O",
-            "testTemplateFunction(#&)::A",
-            "testTemplateFunction(#&)::n",
-            "testTemplateFunction(#&)::b",
-            "testTemplateFunction(#&)::var",
-            "testTemplateFunction(#&)::classIn",
-            "testTemplateFunction(#&)",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>::O",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>::A",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>::n",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>::b",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>::var",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>(#&)::classIn",
+            "testTemplateFunction<<#>, #, size_t#, [1], [#]...>(#&)",
             "TestCStruct",
             "TestCStruct::a1",
             "TestCStruct::a2",
@@ -96,18 +96,18 @@ class TestCCModelParse(CCModelTest):
             "TestTemplateClass1<#, #>::TestTemplateClass1<#, #>()",
             "TestTemplateClass1<#, #>::~TestTemplateClass1<#, #>()",
             "TestTemplateClass1<#, #>::testMethod3()",
-            "TestTemplateClass1<#, #>::testMethod4(#&)",
-            "TestTemplateClass1<#, #>::testMethod4(#&)::T",
-            "TestTemplateClass1<#, #>::testMethod4(#&)::param0",
+            "TestTemplateClass1<#, #>::testMethod4<#>(#&)",
+            "TestTemplateClass1<#, #>::testMethod4<#>::T",
+            "TestTemplateClass1<#, #>::testMethod4<#>(#&)::param0",
             "TestTemplateClass1<#, #>::testMethod5(#&)",
             "TestTemplateClass1<#, #>::testMethod5(#&)::param0",
-            "TestTemplateClass1<#, std::vector<float>>",
-            "TestTemplateClass1<#, std::vector<float>>::A",
-            "TestTemplateClass1<#, std::vector<float>>::"
-            + "TestTemplateClass1<#, std::vector<float>>()",
-            "TestTemplateClass1<#, std::vector<float>>::"
-            + "~TestTemplateClass1<#, std::vector<float>>()",
-            "TestTemplateClass1<#, std::vector<float>>::test_spec_func()",
+            "TestTemplateClass1<#>",
+            "TestTemplateClass1<#>::A",
+            "TestTemplateClass1<#>::"
+            + "TestTemplateClass1<#>()",
+            "TestTemplateClass1<#>::"
+            + "~TestTemplateClass1<#>()",
+            "TestTemplateClass1<#>::test_spec_func()",
             "testPartial<#>",
             "testPartial<#>::C",
             "TestCppClass2",

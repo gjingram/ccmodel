@@ -11,7 +11,7 @@ class TestCCModelVariable(CCModelTest):
     parse_state = ParseHeader("variable_test.hh", "variable_test", [])
 
     def test_parse_object_exists(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")
         expected = ["var1", "var2", "var3", "var4", "var5", "var6", "var7"]
@@ -19,7 +19,7 @@ class TestCCModelVariable(CCModelTest):
             assert summary.name_in_summary(key)
 
     def test_variable_data(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         var1 = summary["var1"]
         assert var1["storage_class"] == "NONE"

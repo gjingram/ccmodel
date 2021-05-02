@@ -22,44 +22,44 @@ class TestCCModelTemplates(CCModelTest):
             "testFunction2(#, #*)::param1",
             "testFunction2(#, #*)::A",
             "testFunction2(#, #*)::B",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::A",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::B",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::C",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::n",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::l",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::var",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::A",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::B",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::C",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::n",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::l",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::var",
             (
-                "TestTemplateClass1<#, #, #, int #, [true], [#...]>::"
-                + "TestTemplateClass1<#, #, #, int #, [true], [#...]>()"
+                "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::"
+                + "TestTemplateClass1<#, <#<, #, int #, [true], [#]...>()"
             ),
             (
-                "TestTemplateClass1<#, #, #, int #, [true], [#...]>::"
-                + "~TestTemplateClass1<#, #, #, int #, [true], [#...]>()"
+                "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::"
+                + "~TestTemplateClass1<#, <#>, #, int #, [true], [#]...>()"
             ),
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::m1",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::m2",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::m3",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::m4",
-            "TestTemplateClass1<#, #, #, int #, [true], [#...]>::m5",
-            "TestTemplateClass1<#, #, double, 2>",
-            "TestTemplateClass1<#, #, double, 2>::A",
-            "TestTemplateClass1<#, #, double, 2>::B",
-            "TestTemplateClass1<#, #, double, 2>::TestTemplateClass1<#, #, double, 2>()",
-            "TestTemplateClass1<#, #, double, 2>::~TestTemplateClass1<#, #, double, 2>()",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::m1",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::m2",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::m3",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::m4",
+            "TestTemplateClass1<#, <#>, #, int #, [true], [#]...>::m5",
+            "TestTemplateClass1<#, <#>>",
+            "TestTemplateClass1<#, <#>>::A",
+            "TestTemplateClass1<#, <#>>::B",
+            "TestTemplateClass1<#, <#>>::TestTemplateClass1<#, <#>>()",
+            "TestTemplateClass1<#, <#>>::~TestTemplateClass1<#, <#>>()",
             "TestTemplateClass2<#>",
             "TestTemplateClass2<#>::A",
             "TestTemplateClass2<#>::TestTemplateClass2<#>()",
             "TestTemplateClass2<#>::~TestTemplateClass2<#>()",
-            "TestTemplateClass1<#, TestTemplateClass2, double, 2>",
-            "TestTemplateClass1<#, TestTemplateClass2, double, 2>::A",
+            "TestTemplateClass1<#>",
+            "TestTemplateClass1<#>::A",
             (
-                "TestTemplateClass1<#, TestTemplateClass2, double, 2>::"
-                + "TestTemplateClass1<#, TestTemplateClass2, double, 2>()"
+                "TestTemplateClass1<#>::"
+                + "TestTemplateClass1<#>()"
             ),
             (
-                "TestTemplateClass1<#, TestTemplateClass2, double, 2>::"
-                + "~TestTemplateClass1<#, TestTemplateClass2, double, 2>()"
+                "TestTemplateClass1<#>::"
+                + "~TestTemplateClass1<#>()"
             ),
         ]
         for exp in expected:

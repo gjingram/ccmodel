@@ -11,9 +11,8 @@ class TestCCModelUnion(CCModelTest):
     parse_state = ParseHeader("union_test.hh", "union_test", [])
 
     def test_parse_objects_exist(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
-        pdb.set_trace()
         expected = [
             "testUnion1",
             "testUnion1::s1",
@@ -28,8 +27,8 @@ class TestCCModelUnion(CCModelTest):
         for exp in expected:
             assert summary.name_in_summary(exp)
 
-    def test_unions(cls_tyhpe, lps):
-        summary = lps[cls_tyhpe.parse_state.test_file_abs]
+    def test_unions(cls_type, lps):
+        summary = lps
 
         union1 = summary["testUnion1"]
         assert union1["id"] == "testUnion1"
@@ -66,7 +65,6 @@ class TestCCModelUnion(CCModelTest):
 
         nest2 = summary["Nest1::Nest2"]
 
-        pdb.set_trace()
         u2s1 = summary["Nest1::Nest2::s1"]
         assert u2s1["scope"] == nest2
         assert u2s1["id"] == "s1"

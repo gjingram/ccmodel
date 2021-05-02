@@ -11,7 +11,7 @@ class TestCCModelFunction(CCModelTest):
     parse_state = ParseHeader("function_test.hh", "function_test", [])
 
     def test_parse_objects_exist(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         expected = [
             "testFunction1()",
@@ -42,7 +42,7 @@ class TestCCModelFunction(CCModelTest):
             assert summary.name_in_summary(exp)
 
     def test_functions(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         func1 = summary["testFunction1()"]
         assert func1["id"] == "testFunction1"

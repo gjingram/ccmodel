@@ -11,7 +11,7 @@ class TestCCModelNamespace(CCModelTest):
     parse_state = ParseHeader("namespace_test.hh", "namespace_test", [])
 
     def test_parse_objects_exist(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         pdb.set_trace()
         print(f"{''.join([key + os.linesep for key in summary.identifier_map.keys()])}")

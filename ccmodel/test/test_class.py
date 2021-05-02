@@ -11,7 +11,7 @@ class TestCCModelClass(CCModelTest):
     parse_state = ParseHeader("class_test.hh", "class_test", [])
 
     def test_objects_in_summary(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         expected = [
             "TestStruct1",
@@ -59,7 +59,7 @@ class TestCCModelClass(CCModelTest):
             assert summary.name_in_summary(exp)
 
     def test_classes(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         struct1 = summary["TestStruct1"]
         assert type(struct1).__name__ == "ClassObject"
@@ -397,7 +397,6 @@ class TestCCModelClass(CCModelTest):
         assert c2dtor1["displayname"] in class2["destructors"]
         assert c2dtor1["scope"] is class2
 
-        pdb.set_trace()
         c2base1 = class2["base_classes"]["TestStruct2"]
         assert c2base1["base_class"] is struct2
         assert c2base1["access_specifier"] == "PUBLIC"

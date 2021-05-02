@@ -11,9 +11,8 @@ class TestCCModelEnum(CCModelTest):
     parse_state = ParseHeader("enumeration_test.hh", "enumeration_test", [])
 
     def test_parse_object_exsts(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
-        pdb.set_trace()
         expected = [
             "testEnum1",
             "A",
@@ -39,7 +38,7 @@ class TestCCModelEnum(CCModelTest):
         return
 
     def test_enumeration_data(cls_type, lps):
-        summary = lps[cls_type.parse_state.test_file_abs]
+        summary = lps
 
         enum1 = summary["testEnum1"]
         assert enum1["inherits_from"] == "unsigned int"
@@ -69,7 +68,6 @@ class TestCCModelEnum(CCModelTest):
         assert enum2["scoped_id"] == "testEnum2"
         assert enum2["scoped_displayname"] == "testEnum2"
 
-        pdb.set_trace()
         assert enum2["fields"]["A"]["value"] == str(0)
         assert enum2["fields"]["A"] is summary["testEnum2::A"]
 
