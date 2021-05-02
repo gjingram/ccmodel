@@ -27,7 +27,6 @@ save_dir = ""
 save_ext = ".ccms"
 unit_name = ""
 headers = []
-parse_also = {}
 headers_parsed = {}
 template_specializations = {}
 
@@ -137,6 +136,7 @@ def process_headers(lheaders: Optional[Union[str, List[str]]] = None) -> None:
                 "process_headers received non-string header names"
         )
 
+    headers = lheaders
     header_topo_sort = graphlib.TopologicalSorter()
     header_to_node = {}
 
@@ -161,14 +161,14 @@ def process_headers(lheaders: Optional[Union[str, List[str]]] = None) -> None:
             proc_header = headers_parsed[ordered_header]
             proc_header.handle_object = True
             proc_header.handle(header_to_node[proc_header])
-            headers_parsed[proc_header.header_file] = proc_header.summary
+            summary.headers[proc_header.header_file] = proc_header.summary
 
     pdb.set_trace()
     save_all(summary, save_ext)
     return
 
 def save_all(save_dict: Dict[str, "HeaderSummary"], ext: str) -> None:
-    return save_summary(save_dict, unit_name + save_ext, save_dir)
+    return sm.save_summary(save_dict, unit_name + save_ext, save_dir)
 
 def handle_diagnostics(diags) -> None:
 
