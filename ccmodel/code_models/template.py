@@ -53,9 +53,6 @@ class TemplateObject(ParseObject):
     @if_handle
     def handle(self, node: cindex.Cursor) -> "TemplateObject":
 
-        if "emplace_back" in self["displayname"]:
-            pdb.set_trace()
-
         children = []
         self.extend_children(node, children)
 
@@ -78,18 +75,36 @@ class TemplateObject(ParseObject):
                 continue
             self["n_template_parameters"] += 1
 
+        tparams = []
+        tnames = []
+        for x in self["template_parameters"].values():
+            if x["is_variadic"]:
+                tparams.append(x.param + "...")
+                tnames.append(x["id"] + "...")
+                continue
+            tparams.append(x.param)
+            tnames.append(x["id"])
+
+        self["displayname"] = self["id"] + \
+                    f"<{', '.join(tnames)}>"
+
         tparents = [*self["template_parents"], self]
         if self["is_alias"]:
             self[
                 "scoped_displayname"
-            ] += f"<{', '.join([x.param for x in self['template_parameters'].values()])}>"
+            ] += f"<{', '.join(tparams)}>"
+            self["scoped_displayname"] = replace_template_params_str(
+                    self["scoped_displayname"],
+                    tparents)
         else:
+            self["scoped_displayname"] = self["scope"]["scoped_displayname"] + \
+                    "::" + self["id"] + f"<{', '.join(tparams)}>" if \
+                    self["scope"]["id"] != "GlobalNamespace" else \
+                    self["id"] + f"<{', '.join(tparams)}>"
             self["scoped_displayname"] = replace_template_params_str(
                 self["scoped_displayname"], tparents
             )
             self.template_params_replaced = True
-        if not self["is_alias"] and not self["is_partial"]:
-            ParseObject.handle(self, node)
         for child_node, param in zip(
             node_children, self["template_parameters"].values()
         ):
@@ -156,6 +171,23 @@ class TemplateObject(ParseObject):
             if not self["object"]:
                 return None
             self["object"].handle(node)
+            signature = "(" + ", ".join([x["type"] for x in self["object"]["params"].values()]) + \
+                    ")"
+
+            self["displayname"] += signature
+            self["scoped_displayname"] += signature
+
+            self["scoped_displayname"] = replace_template_params_str(
+                    self["scoped_displayname"],
+                    tparents)
+
+            self["object"]["displayname"] = self["displayname"]
+            self["object"]["scoped_displayname"] = self["scoped_displayname"]
+
+            self["object"]["scoped_displayname"] = replace_template_params_str(
+                    self["object"]["scoped_displayname"],
+                    tparents)
+
             if self["is_function_template"]:
                 self["object"]["kind"] = "FUNCTION_DECL"
             elif self["is_method_template"]:
@@ -167,6 +199,9 @@ class TemplateObject(ParseObject):
         self["header"].register_object(self)
         if not self["is_definition"]:
             self["definition"] = self["header"].get_usr(node.referenced.get_usr())
+
+        if not self["is_partial"]:
+            ParseObject.handle(self, node)
 
         self["n_template_parameters"] = len(self["template_parameters"])
         self.resolve_primary_ref()
@@ -182,7 +217,7 @@ class TemplateObject(ParseObject):
         template_param.set_header(header_use)
         template_param.add_active_namespaces(self.active_namespaces)
         template_param.add_active_directives(self.active_using_directives)
-        template_param.set_scope(self["scope"])
+        template_param.set_scope(self)
         template_param.add_template_parents([*self["template_parents"], self])
         template_param.set_parse_level(self["parse_level"])
         template_param["force_parse"] = True
@@ -501,15 +536,16 @@ class PartialSpecializationObject(TemplateObject):
         self["partial_ref"] = None
         self["is_alias"] = False
         self.info["primary_name"] = ""
-        self.partial_text = " ".join([x.spelling for x in node.get_tokens()])
-        self._template_decl_params = []
-        self._class_arglist = []
+        self.info["template_decl_params"] = []
+        self.info["class_arglist"] = []
+        self.partial_text = " ".join([x.spelling for x in node.get_tokens()]) if \
+                node else ""
         return
 
     def add_template_decl_param(self, kind: int, ptype: str, name: str) -> None:
         ptype_use = ptype.replace(" ", "")
         name_use = name.replace(" ", "")
-        self._template_decl_params.append((kind, ptype_use, name_use))
+        self["template_decl_params"].append((kind, ptype_use, name_use))
         return
 
     def process_template_paramlist(self, paramlist) -> None:
@@ -537,10 +573,12 @@ class PartialSpecializationObject(TemplateObject):
     def process_class_template_arglist(self, carglist) -> None:
         amatches = split_bracketed_list(carglist)
         for amatch in amatches:
-            self._class_arglist.append(amatch.replace(" ", ""))
+            self["class_arglist"].append(amatch.replace(" ", ""))
         return
 
     def parse_template_decl(self) -> None:
+        if "vector" in self["displayname"] and "double" in self["displayname"]:
+            pdb.set_trace()
         template_defs = find_template_defs(self.partial_text)
         tdef_use = split_bracketed_list(template_defs[0])
         tmatch = re_template_decl.search(template_defs[0])
@@ -558,14 +596,14 @@ class PartialSpecializationObject(TemplateObject):
             ):
                 self.process_class_template_arglist(cmatch.group("t_arglist"))
 
-        for pidx, param in enumerate(self._class_arglist):
-            for tparam in self._template_decl_params:
+        for pidx, param in enumerate(self["class_arglist"]):
+            for tparam in self["template_decl_params"]:
                 if param == tparam[2]:
-                    self._class_arglist[pidx] = "#"
+                    self["class_arglist"][pidx] = "#"
         return
 
     def extract_params(self) -> typing.Tuple[str]:
-        return tuple((arg for arg in self._class_arglist))
+        return tuple((arg for arg in self["class_arglist"]))
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> "PartialSpecializationObject":
@@ -588,12 +626,5 @@ class PartialSpecializationObject(TemplateObject):
                 [*self["template_parents"], self]
                 )
 
-        param_key = []
-        for p in self["template_parameters"].values():
-            if p["is_variadic"]:
-                param_key.append(p.param.replace("#", "#..."))
-                continue
-            param_key.append(p.param)
-
-        self["header"].register_template(using_sid, tuple(param_key), self)
+        self["header"].register_template(using_sid, tuple(self["class_arglist"]), self)
         return

@@ -246,7 +246,7 @@ class NamespaceObject(ParseObject):
             # Catch C typdef struct
             if child.underlying_typedef_type.spelling.startswith("struct "):
                 struct_object = self.create_clang_child_object(child)
-                if struct_object.no_decl or struct_object.handle_object:
+                if struct_object.no_decl or not struct_object.handle_object:
                     return None
                 self.add_struct(struct_object)
                 self["identifier_map"][
@@ -333,7 +333,7 @@ class NamespaceObject(ParseObject):
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> "NamespaceObject":
-
+        
         if not self["is_template"]:
             ParseObject.handle(self, node)
         

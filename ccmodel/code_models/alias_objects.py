@@ -7,7 +7,7 @@ import pdb
 
 from .decorators import if_handle, append_cpo
 from .parse_object import ParseObject
-from .template import PartialSpecializationObject
+from .template import TemplateObject
 from ..rules import code_model_map as cmm
 from ..parsers import cpp_parse as parser
 
@@ -47,10 +47,12 @@ class TypeDefObject(AliasObject):
         structs_and_classes.extend(
             self.children(children, cindex.CursorKind.CLASS_DECL)
         )
+
         for child in structs_and_classes:
             header_use = parser.get_header(child.location.file.name)
             model = cmm.default_code_models[child.kind]
             obj = None
+            pdb.set_trace()
             if child.spelling == "":
                 obj = (
                     model(child, force=True, name=self.get_name())
@@ -81,7 +83,12 @@ class TypeDefObject(AliasObject):
 
             if child.spelling == "":
                 return None
+        
+        self.resolve_alias(node)
+        ParseObject.handle(self, node)
+        return self
 
+    def resolve_alias(self, node: cindex.Cursor) -> None:
         underlying_decl = node.underlying_typedef_type.get_declaration()
         if not underlying_decl.kind == cindex.CursorKind.NO_DECL_FOUND:
             recursion_detected = False
@@ -112,9 +119,7 @@ class TypeDefObject(AliasObject):
             self["aliased_name"] = node.underlying_typedef_type.spelling
             self["aliased_usr"] = node.underlying_typedef_type.spelling
         self["aliased_object"] = self["type_aliased"]
-
-        ParseObject.handle(self, node)
-        return self
+        return
 
 
 @cmm.default_code_model(cindex.CursorKind.TYPE_ALIAS_DECL)
@@ -156,18 +161,19 @@ class NamespaceAliasObject(AliasObject):
 
 
 @cmm.default_code_model(cindex.CursorKind.TYPE_ALIAS_TEMPLATE_DECL)
-class TemplateAliasObject(TypeAliasObject, PartialSpecializationObject):
+class TemplateAliasObject(TypeAliasObject, TemplateObject):
     def __init__(self, node: typing.Optional[cindex.Cursor] = None, force: bool = False):
         TypeAliasObject.__init__(self, node, force)
-        PartialSpecializationObject.__init__(self, node, force)
+        TemplateObject.__init__(self, node, force)
         self["is_alias"] = True
+        self.info["template_ref"] = None
         return
 
     @if_handle
     @append_cpo
     def handle(self, node: cindex.Cursor) -> "TemplateAliasObject":
 
-        TypeAliasObject.handle(self, node)
-        PartialSpecializationObject.handle(self, node)
+        self.resolve_alias(node)
+        TemplateObject.handle(self, node)
 
         return self

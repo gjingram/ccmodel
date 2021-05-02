@@ -70,6 +70,7 @@ class ParseObject(object):
         self.force_search = False
         self.template_params_replaced = False
         self.is_handled = False
+        self.is_tparam = False
         self.no_decl = node.kind == cindex.CursorKind.NO_DECL_FOUND if node else False
 
         return
@@ -286,14 +287,17 @@ class ParseObject(object):
         if node.kind == cindex.CursorKind.NO_DECL_FOUND:
             return False
         in_unit = self.object_in_unit(node)
-        parse_also = (
-                self["scoped_id"] in parser.include_names or
-                self["scoped_id"].startswith(tuple(parser.include_names)[-1])
-                )
-        pa_found = (
-                self["scoped_id"] if self["scoped_id"] in parser.include_names else
-                tuple(parser.include_names)[-1]
-                )
+        parse_also = False
+        pa_found = ""
+        if len(parser.include_names):
+            parse_also = (
+                    self["scoped_id"] in parser.include_names or
+                    self["scoped_id"].startswith(tuple(parser.include_names)[-1])
+                    )
+            pa_found = (
+                    self["scoped_id"] if self["scoped_id"] in parser.include_names else
+                    tuple(parser.include_names)[-1]
+                    )
         if parse_also:
             p_also = parser.include_names[pa_found]
             self["parse_level"] = p_also["access_specifier"]

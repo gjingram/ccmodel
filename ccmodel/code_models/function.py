@@ -7,6 +7,10 @@ from .parse_object import ParseObject
 from .function_param import FunctionParamObject
 from ..rules import code_model_map as cmm
 from ..parsers import cpp_parse as parser
+from ..utils.code_utils import (
+    split_bracketed_list,
+    replace_template_params_str
+)
 
 
 @cmm.default_code_model(cindex.CursorKind.FUNCTION_DECL)
@@ -30,6 +34,18 @@ class FunctionObject(ParseObject):
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> "FunctionObject":
+
+        if self["is_template"]:
+            params = ", ".join(split_bracketed_list(self["displayname"],
+                brack="()",
+                blevel=-1))
+            self["displayname"] = self["template_ref"]["displayname"] + \
+                    "(" + params + ")"
+            self["scoped_displayname"] = self["template_ref"]["scoped_displayname"] + \
+                    "(" + params + ")"
+            self["scoped_displayname"] = replace_template_params_str(
+                self["scoped_displayname"],
+                self["template_parents"])
 
         if not self["is_member"] and not self["is_template"]:
             ParseObject.handle(self, node)

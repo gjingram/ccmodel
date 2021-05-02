@@ -77,10 +77,11 @@ class MemberFunctionObject(FunctionObject):
             if self["is_dtor"]:
                 self["id"] = "~" + self["id"]
                 self["displayname"] = "~" + self["displayname"]
-            self["scoped_id"] = "::".join([self["scope"]["scoped_id"], self["id"]])
-            self["scoped_displayname"] = "::".join(
-                [self["scope"]["scoped_displayname"], self["displayname"]]
-            )
+            
+        
+        self["scoped_id"] = "::".join([self["scope"]["scoped_id"], self["id"]])
+        self["scoped_displayname"] = "::".join(
+                [self["scope"]["scoped_displayname"], self["displayname"]])
 
         if not self["is_template"]:
             ParseObject.handle(self, node)

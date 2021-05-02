@@ -28,6 +28,8 @@ class TemplateParamObject(ParseObject):
     def __init__(self, tparent: "TemplateObject", node: typing.Optional[cindex.Cursor] = None, force: bool = False):
         ParseObject.__init__(self, node, force)
 
+        self.is_tparam = True
+
         self.info["param_type"] = node.kind.name if node is not None else ""
         self.info["template"] = tparent
         self.info["object"] = None
@@ -40,18 +42,14 @@ class TemplateParamObject(ParseObject):
         self.info["optional"] = False
         self.info["parameter"] = None
 
+        self.variadic_tt = False
+
         anon_by_def = self["id"] == ""
         if self["id"] == "":
             self["id"] = f"param{self['template']['n_template_parameters']}"
             self["displayname"] = self["id"]
         if node is not None:
             self.determine_scope_name(node)
-        if self["usr"] == "":
-            self["usr"] = self["scoped_displayname"]
-        self["scoped_displayname"] = (
-            self["template"]["scoped_displayname"] + "::" + self["id"]
-        )
-        self.template_params_replaced = True
 
         if node is not None:
             self.handle_parameter(node)
@@ -76,7 +74,6 @@ class TemplateParamObject(ParseObject):
                 )
             self.param = "#"
         elif self["param_type"] == "TEMPLATE_NON_TYPE_PARAMETER":
-            pdb.set_trace()
             self["is_non_type_param"] = True
             self.type = node.type.spelling if node is not None else ""
             self.param = f"{self.type}#"
@@ -127,7 +124,7 @@ class TemplateParamObject(ParseObject):
             tmatch_groups = tmatch.groupdict()
             if "default" in tmatch_groups and tmatch_groups["default"] is not None:
                 self.set_default_value(tmatch_groups["default"])
-            if "..." in param_str:
+            if "ellipsis" in tmatch_groups and tmatch_groups["ellipsis"] is not None:
                 self.is_variadic(True)
             return
 
@@ -145,6 +142,15 @@ class TemplateParamObject(ParseObject):
 
     @if_handle
     def handle(self, node: cindex.Cursor) -> "TemplateParamObject":
+        
+        scope_rep = replace_template_params_str(
+                self["template"]["scoped_displayname"],
+                self["template_parents"])
+        self["scoped_displayname"] = scope_rep + "::" + self["id"]
+        self.template_params_replaced = True
+        if self["usr"] == "":
+            self["usr"] = self["scoped_displayname"]
+
         return ParseObject.handle(self, node)
 
     def set_template(self, template: "TemplateObject") -> "TemplateParamObject":

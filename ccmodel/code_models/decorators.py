@@ -63,7 +63,8 @@ def add_obj_to_header_summary(obj: "ParseObject") -> None:
             header_add_fn = obj["header"].header_add_fns[obj["kind"]]
         except KeyError:
             header_add_fn = obj["header"].header_add_unknown
-        replace_template_params(obj)
+        if not obj.is_tparam:
+            replace_template_params(obj)
         header_add_fn(obj)
         obj["header"].summary.add_obj_to_summary_maps(obj)
 

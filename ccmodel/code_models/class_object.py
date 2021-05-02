@@ -50,6 +50,8 @@ class ClassObject(NamespaceObject):
     def set_template_ref(self, templ: "TemplateObject") -> "ClassObject":
         self["is_template"] = True
         self["template_ref"] = templ
+        self["displayname"] = templ["displayname"]
+        self["scoped_displayname"] = templ["scoped_displayname"]
         return self
 
     def process_child(self, child: cindex.Cursor) -> typing.Optional["ParseObject"]:

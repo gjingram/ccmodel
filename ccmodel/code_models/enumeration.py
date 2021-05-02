@@ -5,6 +5,7 @@ import pdb
 from .decorators import if_handle, append_cpo
 from .parse_object import ParseObject
 from ..rules import code_model_map as cmm
+from ..parsers import cpp_parse as parser
 
 
 @cmm.default_code_model(cindex.CursorKind.ENUM_CONSTANT_DECL)
@@ -67,7 +68,7 @@ class EnumObject(ParseObject):
             if self["is_template"]
             else self["template_parents"]
         )
-        header_use = self["header"].parser.get_header(node.location.file.name)
+        header_use = parser.get_header(node.location.file.name)
         if self["is_scoped"]:
             return (
                 cpo_class(node)

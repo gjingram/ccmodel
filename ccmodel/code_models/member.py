@@ -26,7 +26,6 @@ class MemberObject(VariableObject):
         if (
             self["scope"]
             and not self["scope"]["export_to_scope"]
-            and node.semantic_parent.spelling == ""
         ):
             self["scoped_id"] = "::".join([self["scope"]["scoped_id"], self["id"]])
             self["scoped_displayname"] = "::".join(

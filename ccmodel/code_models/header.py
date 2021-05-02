@@ -343,7 +343,7 @@ class HeaderObject(object):
             return out
 
         if parser.summary.name_in_summary(child.displayname if not ref_node else ref_node.displayname):
-            return summary.summary[child.displayname]
+            return parser.summary[child.displayname]
 
         for name in vary_name_over_using_directives(child.displayname if not ref_node else ref_node.displayname):
             if parser.summary.name_in_summary(name):
@@ -710,7 +710,6 @@ class HeaderObject(object):
         for tok in node.get_tokens():
             if tok.kind == cindex.TokenKind.COMMENT:
                 self.summary.comments[self.header_file].append(CommentObject(tok))
-        pdb.set_trace()
         self.base_namespace.set_header(self)
         self.base_namespace.do_handle(node)
         self.base_namespace.handle(node)
