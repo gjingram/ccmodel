@@ -108,7 +108,7 @@ def replace_template_params_str(
     return rep_str
 
 
-def split_bracketed_list(args_in: str, brack: str = "<>", blevel: int = 0) -> typing.List[str]:
+def split_bracketed_list(args_in: str, brack: str = "<>", blevel: int = -1) -> typing.List[str]:
     bracket_level = blevel
     str_buffer = []
     out = []
@@ -117,12 +117,12 @@ def split_bracketed_list(args_in: str, brack: str = "<>", blevel: int = 0) -> ty
             out.append("".join(str_buffer).strip())
             str_buffer = []
             continue
-        if char == brack[0]:
+        if char == brack[0] :
             bracket_level += 1
         if char == brack[1]:
             bracket_level -= 1
         if bracket_level >= 0:
-            if char in brack and bracket_level == 0:
+            if bracket_level == 0 and char == brack[0]:
                 continue
             str_buffer.append(char)
     out.append("".join(str_buffer).strip())
