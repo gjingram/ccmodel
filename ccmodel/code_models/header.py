@@ -187,6 +187,9 @@ class HeaderObject(object):
         # kind is NO_DECL_FOUND or if the definition of a 
         # CXX_BASE_SPECIFIER node is also a CXX_BASE_SPECIFIER
         clang_dep_resolved = True
+        if ref_node.kind == cindex.CursorKind.NO_DECL_FOUND:
+            pdb.set_trace()
+
         clang_dep_resolved &= (ref_node.kind != cindex.CursorKind.NO_DECL_FOUND)
         clang_dep_resolved &= (ref_node.kind != cindex.CursorKind.CXX_BASE_SPECIFIER)
         clang_dep_resolved &= not is_template_spec
@@ -380,8 +383,8 @@ class HeaderObject(object):
                 try_template = self.header_match_template_ref(
                         test_name,
                         split_bracketed_list(
-                            match_template.group("t_arglist")
-                            ),
+                            match_template.group("t_arglist"),
+                            blevel=0),
                         child.get_usr())
                 test_name = test_name + match_template.group("t_section")
 
@@ -400,8 +403,8 @@ class HeaderObject(object):
                     template_inst = try_template.instantiate(
                             test_name,
                             split_bracketed_list(
-                                match_template.group("t_arglist")
-                                ),
+                                match_template.group("t_arglist"),
+                                blevel=0),
                             )
             if template_inst:
                 return template_inst
@@ -470,16 +473,15 @@ class HeaderObject(object):
                     elif pspec_key[param_idx] == param:
                         continue
                     elif (
+                        param == re_param.search(pspec_key[param_idx]) and
                         re_param.search(pspec_key[param_idx]).groupdict()["default"]
                         is not None
                     ):
                         continue
                     elif param_idx == len(params) - 1:
                         for remain in pspec_key[param_idx:]:
-                            default = re_param.search(remain).group("default")
-                            if default is not None:
-                                continue
-                            elif remain.endswith("..."):
+                            match = re_param.search(remain)
+                            if match and match.groupdict()["default"] is not None:
                                 continue
                             else:
                                 possible_match_keys.pop(pspec_idx)
