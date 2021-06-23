@@ -17,6 +17,10 @@ from ..utils.code_utils import (
     split_scope_list
 )
 
+'''
+clang -fsyntax-only -Xpreprocessor -detailed-preprocessing-record -Xclang -load -Xclang ../../fb_plugins/libtooling/build/FacebookClangPlugin.dylib -Xclang -plugin -Xclang JsonASTExporter -Xclang -plugin-arg-JsonASTExporter -Xclang  parse_test.json -c /home/gabriel/projects/ccmodel/ccmodel/test/test_hh/parse_test.hh
+'''
+
 _index = clang_cfg.clang.cindex.Index.create()
 
 compiler_args = []
