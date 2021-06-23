@@ -101,13 +101,13 @@ class TestCCModelParse(CCModelTest):
             "TestTemplateClass1<#, #>::testMethod4<#>(#&)::param0",
             "TestTemplateClass1<#, #>::testMethod5(#&)",
             "TestTemplateClass1<#, #>::testMethod5(#&)::param0",
-            "TestTemplateClass1<#>",
-            "TestTemplateClass1<#>::A",
-            "TestTemplateClass1<#>::"
-            + "TestTemplateClass1<#>()",
-            "TestTemplateClass1<#>::"
-            + "~TestTemplateClass1<#>()",
-            "TestTemplateClass1<#>::test_spec_func()",
+            "TestTemplateClass1<#, std::vector<float>>",
+            "TestTemplateClass1<#, std::vector<float>>::A",
+            "TestTemplateClass1<#, std::vector<float>>::"
+            + "TestTemplateClass1<#, std::vector<float>>()",
+            "TestTemplateClass1<#, std::vector<float>>::"
+            + "~TestTemplateClass1<#, std::vector<float>>()",
+            "TestTemplateClass1<#, std::vector<float>>::test_spec_func()",
             "testPartial<#>",
             "testPartial<#>::C",
             "TestCppClass2",
