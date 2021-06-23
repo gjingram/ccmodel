@@ -85,9 +85,6 @@ class TemplateObject(ParseObject):
             tparams.append(x.param)
             tnames.append(x["id"])
 
-        self["displayname"] = self["id"] + \
-                    f"<{', '.join(tnames)}>"
-
         tparents = [*self["template_parents"], self]
         if self["is_alias"]:
             self[
@@ -96,7 +93,7 @@ class TemplateObject(ParseObject):
             self["scoped_displayname"] = replace_template_params_str(
                     self["scoped_displayname"],
                     tparents)
-        else:
+        elif self["is_primary"]:
             self["scoped_displayname"] = self["scope"]["scoped_displayname"] + \
                     "::" + self["id"] + f"<{', '.join(tparams)}>" if \
                     self["scope"]["id"] != "GlobalNamespace" else \
@@ -105,6 +102,9 @@ class TemplateObject(ParseObject):
                 self["scoped_displayname"], tparents
             )
             self.template_params_replaced = True
+        else:
+            pass
+
         for child_node, param in zip(
             node_children, self["template_parameters"].values()
         ):
@@ -195,10 +195,6 @@ class TemplateObject(ParseObject):
         else:
             if self["is_partial"]:
                 return None
-
-        self["header"].register_object(self)
-        if not self["is_definition"]:
-            self["definition"] = self["header"].get_usr(node.referenced.get_usr())
 
         if not self["is_partial"]:
             ParseObject.handle(self, node)
@@ -516,8 +512,8 @@ class TemplateObject(ParseObject):
 
 
 template_decl = r"\btemplate\s*<(?P<t_arglist>.*)>(?=\s*(:{2})?\w)?"
-template_class = r"(?:class|struct)\s*(?P<cls_name>\w*)\s*<(?P<t_arglist>.*)>\s*"
-template_class += r"(?::\s*(?:\s*(?:public|protected|private)\s*\w*,?\s*)*)?\s*{"
+template_class = r"(?:class|struct)\s*(?P<cls_name>\w*)\s*<\s*(?P<t_arglist>.*)\s*>"
+template_class += r"\s*(?:{|:)"
 template_alias = (
     r"using\s*(?P<alias>\w*)\s*=\s*(?P<cls_name>\w*)\s*(?:<(?P<t_arglist>.*)>)?"
 )
@@ -549,8 +545,7 @@ class PartialSpecializationObject(TemplateObject):
         return
 
     def process_template_paramlist(self, paramlist) -> None:
-        pmatches = split_bracketed_list(paramlist)
-        for pmatch in pmatches:
+        for pmatch in paramlist:
             tmatch = re_type_param.match(pmatch)
             ntmatch = re_nontype_param.match(pmatch)
             if tmatch is not None:
@@ -571,18 +566,23 @@ class PartialSpecializationObject(TemplateObject):
         return
 
     def process_class_template_arglist(self, carglist) -> None:
-        amatches = split_bracketed_list(carglist)
+        amatches = split_bracketed_list(carglist, blevel=0)
         for amatch in amatches:
+            if self["scoped_displayname"].startswith("std::vector<bool"):
+                pdb.set_trace()
+            amatch = replace_template_params_str(
+                    amatch,
+                    [*self["template_parents"], self])
             self["class_arglist"].append(amatch.replace(" ", ""))
         return
 
     def parse_template_decl(self) -> None:
-        if "vector" in self["displayname"] and "double" in self["displayname"]:
+        if self["id"] == "TestTemplateClass1":
             pdb.set_trace()
         template_defs = find_template_defs(self.partial_text)
         tdef_use = split_bracketed_list(template_defs[0])
         tmatch = re_template_decl.search(template_defs[0])
-        self.process_template_paramlist(tmatch.group("t_arglist"))
+        self.process_template_paramlist(tdef_use)
         cmatch = None
         if not self["is_alias"]:
             cmatch = re_template_class.search(self.partial_text)
@@ -596,10 +596,6 @@ class PartialSpecializationObject(TemplateObject):
             ):
                 self.process_class_template_arglist(cmatch.group("t_arglist"))
 
-        for pidx, param in enumerate(self["class_arglist"]):
-            for tparam in self["template_decl_params"]:
-                if param == tparam[2]:
-                    self["class_arglist"][pidx] = "#"
         return
 
     def extract_params(self) -> typing.Tuple[str]:
@@ -608,12 +604,15 @@ class PartialSpecializationObject(TemplateObject):
     @if_handle
     def handle(self, node: cindex.Cursor) -> "PartialSpecializationObject":
         TemplateObject.handle(self, node)
-        if not self["is_alias"]:
-            ParseObject.handle(self, node)
+        if node.spelling == "TestTemplateClass1":
+            pdb.set_trace()
         self.parse_template_decl()
         self.resolve_partial_ref()
-        if not self["is_alias"]:
-            self["partial_ref"] = self
+        self["scoped_displayname"] = replace_template_params_str(
+                self["scoped_displayname"],
+                [*self["template_parents"], self])
+        ParseObject.handle(self, node)
+        self["partial_ref"] = self
         return self
 
     def resolve_partial_ref(self) -> None:
