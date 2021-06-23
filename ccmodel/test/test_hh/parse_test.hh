@@ -23,11 +23,9 @@
 //#include "arch/ether_macros.h"
 //#include "arch/data_management/data_pin.h"
 
-//!< An inline ether comment
 
-/*< An ether comment spanning
-    multiple lines >*/
-
+/** An ether comment spanning
+    multiple lines */
 enum testEnum1 {
     A = 0,
     B = 1
@@ -38,8 +36,8 @@ enum class testEnum2 : uint32_t {
     B = 1
 };
 
-double testFunc1(double, float a, int b);
-double testFunc1(int, float, double a = 20.0);
+double testFunc1(double, float a, int b); /// testFunc1
+double testFunc1(int, float, double a = 20.0); /// testFunc2
 double testFunc1(double *, double &);
 
 std::vector<float> var;
@@ -59,7 +57,7 @@ namespace ttNamespace1 = testNamespace1::testNamespace2;
 using std::vector;
 using namespace testNamespace1::testNamespace2;
 
-template<template<class> class O, typename A, size_t n, size_t b = 1, class ...var>
+template<template<class> class O, typename A, size_t n, size_t b = 10, class ...var>
 A& testTemplateFunction(A& classIn) { int a = n; return classIn; }
 
 typedef struct {
@@ -94,7 +92,7 @@ class TestCppClass {
 
 };
 
-template<class A, class B>
+template<class A, class B=double>
 class TestTemplateClass1 : public TestCppClass, public TestCppStruct {
 
     public:
@@ -102,6 +100,8 @@ class TestTemplateClass1 : public TestCppClass, public TestCppStruct {
     virtual ~TestTemplateClass1();
 
     virtual void testMethod3() override;
+
+    B test_var;
 
     template<class T>
     T testMethod4(A&);
@@ -122,7 +122,7 @@ class TestTemplateClass1<A, std::vector<float>> {
 };
 
 template<class C>
-using testPartial = TestTemplateClass1<C, float>;
+using testPartial = TestTemplateClass1<C, std::vector<float>>;
 
 class TestCppClass2 : public TestTemplateClass1<float, double> {
 
