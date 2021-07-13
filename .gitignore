@@ -132,4 +132,10 @@ dmypy.json
 .pyre/
 
 # No swap files
-.swp
+*.swp
+
+# No json
+*.json
+
+# No ccms files
+*.ccms
