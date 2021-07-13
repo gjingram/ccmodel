@@ -1,3 +1,0 @@
-[submodule "ccmodel/clang_tools"]
-	path = ccmodel/clang_tools
-	url = https://github.com/gjingram/clang_tools
