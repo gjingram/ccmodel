@@ -1,37 +1,43 @@
-[tool.poetry]
+[project]
 name = "ccmodel"
-version = "0.1.0"
-description = "Python libclang-powered C/C++ code modeling"
-authors = ["Gabe Ingram <gabriel.ingram@colorado.edu>"]
-license = "BSD 3-Clause"
-maintainers = ["Gabe Ingram <gabriel.ingram@colorado.edu>"]
+version = "0.1.1"
+description = "Python libtooling-powered C/C++ code modeling"
+authors = [
+    {name = "Gabriel Ingram", email = "gabriel.ingram@colorado.edu"}
+]
+dependencies = [
+    "clang<12.0,>=11.0",
+    "loguru<1.0.0,>=0.5.3",
+    "graphlib-backport<2.0.0,>=1.0.3",
+    "regex<2022.0.0,>=2021.4.4",
+    "orjson<4.0.0,>=3.5.2",
+    "ccm-clang-tools"]
+requires-python = ">=3.8"
+dynamic = ["classifiers", "classifiers"]
+license = {text = "MIT"}
+maintainers = [
+    {name = "Gabe Ingram", email = "gabriel.ingram@colorado.edu"},
+]
 readme = "README.md"
+keywords = ["c", "cc", "c++", "parse", "code model"]
+
+[project.urls]
 homepage = ""
 repository = "https://github.com/gjingram/ccmodel"
 documentation = ""
-keywords = [
-    "c",
-    "cc",
-    "c++",
-    "parse",
-    "code model"
+
+[tool.pdm]
+includes = []
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest<7.0.0,>=6.2.2",
+    "black<21.0,>=20.8b1",
+    "vulture<3.0,>=2.3",
+    "twine"
 ]
 
-[tool.poetry.dependencies]
-python = "^3.7"
-clang = "^11.0"
-loguru = "^0.5.3"
-graphlib-backport = "^1.0.3"
-regex = "^2021.4.4"
-orjson = "^3.5.2"
-
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.2"
-trashy-poetry = "^1.0.3"
-black = "^20.8b1"
-vulture = "^2.3"
-
-
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
+
+
