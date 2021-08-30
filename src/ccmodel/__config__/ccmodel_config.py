@@ -4,15 +4,24 @@ import os
 from loguru import logger
 from warnings import warn
 
-ccmodel_top = str(pathlib.Path(os.path.dirname(os.path.realpath(__file__))).parents[0])
-
+ccmodel_top = str(
+        pathlib.Path(
+            os.path.dirname(
+                os.path.realpath(
+                    __file__)
+                )
+            ).parents[0]
+        )
 
 def log_parsed_objects(record):
     return record["extra"]["log_parsed"] and record["extra"]["logs_parses"]
 
 
 def log_object_dependencies(record):
-    return record["extra"]["log_object_deps"] and record["extra"]["logs_object_deps"]
+    return (
+            record["extra"]["log_object_deps"] and
+            record["extra"]["logs_object_deps"]
+            )
 
 
 def ccmodel_stage_log(record):
@@ -27,7 +36,9 @@ class IndentingParseFormatter(object):
     def __init__(self):
         self.n_spaces = 3
         self.indent_level = 0
-        self.fmt = "ccmodel: {extra[header]} -- " + "{extra[indent]}-{message}\n"
+        self.fmt = (
+                "ccmodel: {extra[header]} -- " + "{extra[indent]}-{message}\n"
+                )
         return
 
     def format(self, record):
@@ -39,7 +50,10 @@ indenting_formatter = IndentingParseFormatter()
 
 ccmodel_log_config = {
     "handlers": [
-        {"sink": sys.stdout, "format": ccmodel_stage_fmt, "filter": ccmodel_stage_log},
+        {
+            "sink": sys.stdout,
+            "format": ccmodel_stage_fmt,
+            "filter": ccmodel_stage_log},
         {
             "sink": sys.stdout,
             "format": indenting_formatter.format,
@@ -67,5 +81,3 @@ log_object_deps = False
 
 logger.configure(**ccmodel_log_config)
 logger.disable("ccmodel")
-object_registry = []
-logger_registry = {}

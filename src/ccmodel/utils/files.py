@@ -3,6 +3,7 @@ import os
 import typing
 import traceback
 import functools
+import orjson as json
 
 
 class cd(object):
@@ -38,14 +39,8 @@ def get_files_by_ext(
 
     return out
 
-
-def in_pkg_dir(method):
-    @functools.wraps(method)
-    def _in_pkg_dir(object_in: "IlluminatePackage", *args, **kwargs):
-        out = None
-        with cd(object_in.illuminate_pkg_abspath):
-            out = method(object_in, *args, **kwargs)
-
-        return out
-
-    return _in_pkg_dir
+def load_json_file(file_name: str) -> dict:
+    content = None
+    with open(file_name, "r") as json_file:
+        content = json.loads(json_file.read())
+    return content
