@@ -6,12 +6,13 @@ authors = [
     {name = "Gabriel Ingram", email = "gabriel.ingram@colorado.edu"}
 ]
 dependencies = [
-    "clang<12.0,>=11.0",
     "loguru<1.0.0,>=0.5.3",
-    "graphlib-backport<2.0.0,>=1.0.3",
+    "graphlib-backport~=1.0",
     "regex<2022.0.0,>=2021.4.4",
     "orjson<4.0.0,>=3.5.2",
-    "ccm-clang-tools"]
+    "ccm-clang-tools",
+    "docker~=5.0",
+]
 requires-python = ">=3.8"
 dynamic = ["classifiers", "classifiers"]
 license = {text = "MIT"}
@@ -33,11 +34,15 @@ dev = [
     "pytest<7.0.0,>=6.2.2",
     "black<21.0,>=20.8b1",
     "vulture<3.0,>=2.3",
-    "twine"
+    "twine",
+    "setuptools",
 ]
 
 [build-system]
-requires = ["pdm-pep517"]
-build-backend = "pdm.pep517.api"
+requires = [
+    "setuptools",
+    "pdm-pep517"
+    ]
+build-backend = "pdm_nosrc.no_src_backend"
 
 
