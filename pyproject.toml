@@ -10,7 +10,7 @@ dependencies = [
     "graphlib-backport~=1.0",
     "regex<2022.0.0,>=2021.4.4",
     "orjson<4.0.0,>=3.5.2",
-    "ccm-clang-tools",
+    "ccm-clang-tools~=0.1",
     "docker~=5.0",
 ]
 requires-python = ">=3.8"
@@ -26,6 +26,9 @@ keywords = ["c", "cc", "c++", "parse", "code model"]
 homepage = ""
 repository = "https://github.com/gjingram/ccmodel"
 documentation = ""
+
+[project.scripts]
+ccm = "ccmodel.ccm:run_ccm"
 
 [tool.pdm]
 includes = []
