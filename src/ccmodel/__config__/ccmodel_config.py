@@ -14,30 +14,24 @@ ccmodel_top = str(
         )
 
 def log_parsed_objects(record):
-    return record["extra"]["log_parsed"] and record["extra"]["logs_parses"]
-
-
-def log_object_dependencies(record):
-    return (
-            record["extra"]["log_object_deps"] and
-            record["extra"]["logs_object_deps"]
-            )
-
+    return record["extra"]["log_parsed"]
 
 def ccmodel_stage_log(record):
     return record["extra"]["stage_log"]
 
-
-ccmodel_stage_fmt = "ccmodel: {message}"
-ccmodel_common_fmt = "ccmodel: {extra[header]} -- {message}"
-
+def ccmodel_stage_fmt(record):
+    color = record["extra"]["color"]
+    fmt = "ccmodel: {message}"
+    if color != "":
+        fmt = f"<{color}>" + fmt + f"</{color}>"
+    return fmt
 
 class IndentingParseFormatter(object):
     def __init__(self):
-        self.n_spaces = 3
+        self.n_spaces = 2
         self.indent_level = 0
         self.fmt = (
-                "ccmodel: {extra[header]} -- " + "{extra[indent]}-{message}\n"
+                "ccmodel: {extra[header]} -- " + "{extra[indent]}|-{message}\n"
                 )
         return
 
@@ -53,31 +47,22 @@ ccmodel_log_config = {
         {
             "sink": sys.stdout,
             "format": ccmodel_stage_fmt,
-            "filter": ccmodel_stage_log},
+            "filter": ccmodel_stage_log
+        },
         {
             "sink": sys.stdout,
             "format": indenting_formatter.format,
             "filter": log_parsed_objects,
-        },
-        {
-            "sink": sys.stdout,
-            "format": indenting_formatter.format,
-            "filter": log_object_dependencies,
-        },
+        }
     ],
     "extra": {
         "header": "",
         "indent": "",
         "log_parsed": False,
-        "logs_parses": False,
-        "log_object_deps": False,
-        "logs_object_deps": False,
         "stage_log": False,
+        "color": ""
     },
 }
-
-log_parsed = False
-log_object_deps = False
 
 logger.configure(**ccmodel_log_config)
 logger.disable("ccmodel")
