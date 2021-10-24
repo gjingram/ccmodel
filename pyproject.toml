@@ -1,51 +1,45 @@
 [project]
 name = "ccmodel"
 version = "0.1.1"
-description = "Python libtooling-powered C/C++ code modeling"
+description = ""
 authors = [
-    {name = "Gabriel Ingram", email = "gabriel.ingram@colorado.edu"}
+    {name = "Gabe Ingram", email = "gabriel.ingram@colorado.edu"},
 ]
 dependencies = [
-    "loguru<1.0.0,>=0.5.3",
+    "loguru~=0.5",
     "graphlib-backport~=1.0",
-    "regex<2022.0.0,>=2021.4.4",
-    "orjson<4.0.0,>=3.5.2",
+    "regex~=2021.10",
+    "orjson~=3.6",
     "ccm-clang-tools~=0.1",
     "docker~=5.0",
 ]
 requires-python = ">=3.8"
-dynamic = ["classifiers", "classifiers"]
+dynamic = ["classifiers"]
 license = {text = "MIT"}
-maintainers = [
-    {name = "Gabe Ingram", email = "gabriel.ingram@colorado.edu"},
-]
 readme = "README.md"
-keywords = ["c", "cc", "c++", "parse", "code model"]
+keywords = ["c", "cc", "c++", "cpp", "parse", "code", "model"]
 
 [project.urls]
-homepage = ""
+homepage = "https://github.com/gjingram/ccmodel"
 repository = "https://github.com/gjingram/ccmodel"
 documentation = ""
 
 [project.scripts]
 ccm = "ccmodel.ccm:run_ccm"
 
+[project.optional-dependencies]
+[build-system]
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
+
+[tool]
 [tool.pdm]
-includes = []
+package-dir = "src"
 [tool.pdm.dev-dependencies]
 dev = [
-    "pytest<7.0.0,>=6.2.2",
-    "black<21.0,>=20.8b1",
-    "vulture<3.0,>=2.3",
-    "twine",
-    "setuptools",
+    "pytest~=6.2",
+    "black<22,>=21.9b0",
+    "vulture~=2.3",
+    "twine~=3.4",
+    "setuptools~=58.3",
 ]
-
-[build-system]
-requires = [
-    "setuptools",
-    "pdm-pep517"
-    ]
-build-backend = "pdm_nosrc.no_src_backend"
-
-

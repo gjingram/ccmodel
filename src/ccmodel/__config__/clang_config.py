@@ -17,7 +17,6 @@ import ccm_clang_tools.build_plugin as bp
 import ccm_clang_tools.get_docker_image as gdi
 
 import ccmodel.__config__.ccmodel_config as ccm_config
-import pdb
 
 
 class ToolType(object):

@@ -26,7 +26,6 @@ from ccmodel.__config__ import (
 )
 import ccm_clang_tools.clang_parse as cp
 import ccm_clang_tools.utils as ctu
-import pdb
 
 ccm_cl = argparse.ArgumentParser(
         description="CCModel Command Line Interface"
@@ -65,6 +64,14 @@ ccm_cl.add_argument(
         default="ccm"
         )
 ccm_cl.add_argument(
+        "-do",
+        "--delete-out",
+        help="Delete output directory, if it exists",
+        type=bool,
+        default=False,
+        action="store_true"
+        )
+ccm_cl.add_argument(
         "-d",
         "--use-docker",
         help="Force use of the ccm-clang-tools docker frontend",
@@ -97,6 +104,7 @@ class CcmOpt(object):
     def __init__(self):
         self.verbosity = None
         self.out_dir = None
+        self.delete_out = False
         self.use_docker = False
         self.force = False
         self.ccm_files = []
@@ -116,6 +124,7 @@ def handle_command_line() -> Tuple[argparse.Namespace, argparse.Namespace]:
     ccm, clang = ccm_cl.parse_known_args()
     ccm_opt.verbosity = ccm.verbosity
     ccm_opt.out_dir = ccm.out_dir
+    ccm_opt.delete_out_dir = ccm.delete_out
     ccm_opt.use_docker = ccm.use_docker
     ccm_opt.force = ccm.force
     ccm_opt.ccm_files = ccm.files
@@ -155,7 +164,6 @@ def set_main_include_paths() -> None:
         file_ = main_inc.file
         ccm_opt.ccm_files.append(file_)
     ccm_opt.ccm_files = list(set(ccm_opt.ccm_files))
-    pdb.set_trace()
     return
 
 def call_clang() -> None:
@@ -172,7 +180,7 @@ def call_clang() -> None:
     ccmodel_config.logger.bind(stage_log=True).info(
             pre_processing_notification
             )
-    
+
     tic = time.perf_counter()
     if clang_config.tool_type == clang_config.ToolType.DOCKER:
         cp.docker_command(
@@ -239,8 +247,8 @@ def remove_host(path: str) -> str:
                 os.sep + "host"
                 )
         path_out = os.sep + path_out
-        return path_out
-    return path
+        return os.path.normpath(out)
+    return os.path.normpath(path)
 
 def ccm_process() -> None:
 
@@ -343,8 +351,12 @@ def make_output_directories() -> None:
                 " Please delete or relocate.\n"
                 )
         raise RuntimeError
-
     elif not os.path.exists(ccm_opt.out_dir):
+        if (
+                ccm_opt.delete_out and not
+                include_stage
+                ):
+            shutil.rmtree(ccm_opt.out_dir)
         make_dirs.append(ccm_opt.out_dir)
 
     file_dirs = []
@@ -366,7 +378,6 @@ def make_output_directories() -> None:
     for dir_ in make_dirs:
         if not os.path.exists(dir_):
             Path(dir_).mkdir(parents=True)
-    pdb.set_trace()
     return
 
 def ensure_cleanup() -> None:
@@ -399,11 +410,9 @@ def main() -> None:
     main_ccm()
     ensure_cleanup()
     if ccm_opt.process_main_includes and not include_stage:
-        pdb.set_trace()
         include_stage = True
         set_main_include_paths()
         main()
-        ensure_cleanup()
     return
 
 def run_ccm() -> None:
