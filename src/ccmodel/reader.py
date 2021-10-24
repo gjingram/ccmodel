@@ -15,52 +15,51 @@ from ccmodel.utils import files as fs
 import os
 import time
 from typing import List
-import copy
-import cython
+from ccmodel.code_models.header import Header
+import ccmodel.code_models.pointers as pointers
 import orjson as json
 import pdb
 
-input_file = ""
-input_kind = ""
-includes = []
 
-def clear() -> None:
-    pointers.type_map = {}
-    pointers.decl_map = {}
-    pointers.stmt_map = {}
-    pointers.attr_map = {}
-    pointers.attr_data = {}
-    pointers.decl_data = {}
-    pointers.stmt_data = {}
-    pointers.type_data = {}
-    input_file = ""
-    input_kind = ""
-    includes = []
+def clear_pointers() -> None:
+    pointers.pointer_map = {}
+    pointers.qual_types = []
+    pointers.short_types = {}
+    pointers.typedefs = []
     return
 
-def get_includes() -> List[str]:
-    return copy.deepcopy(includes)
+class CcsReader(object):
 
-def clang_read_and_extract(clang_file: str, ccm: "argparse.Namespace") -> None:
-    global input_file, input_kind
+    def __init__(self, db_path: str):
+        self._database = db_path
+        return
 
-    tic = time.perf_counter()
-    full_file = os.path.join(os.getcwd(), clang_file)
-    translation_unit = fs.load_json_file(full_file)
-    toc = time.perf_counter()
-
-    if ccm.verbosity > 0:
-        print(f"clang_read_and_extract complete in: {toc - tic} [s]")
-
-    return translation_unit
-
-def _key_recurse(content_dict: dict, key: str) -> None:
-    if key in content_dict:
-        return content_dict[key]
-    else:
-        for ckey, val in content_dict.items():
-            out = _key_recurse(val, key)
-            if out:
-                return out
-    return None
-
+    def read(self, ccs_file: str) -> Header:
+        main_header = Header(
+                os.path.join(
+                    self._database,
+                    ccs_file.lstrip(os.sep)
+                    )
+                )
+        main_includes = []
+        for inc in main_header.includes:
+            inc_file_dir = os.path.dirname(inc.file)
+            inc_file_base = os.path.basename(inc.file)
+            inc_path = os.path.join(
+                    self._database,
+                    inc_file_dir,
+                    inc_file_base) + ".ccs"
+            include = Header(os.path.join(
+                self._database,
+                inc_path.lstrip(os.sep)
+                )
+                )
+            if include.file_loaded:
+                include.extract_translation_unit()
+                main_includes.append(include)
+                clear_pointers()
+        main_header.extract_translation_unit()
+        main_header.merge_includes(main_includes)
+        main_header.resolve_pointers()
+        main_header.build_translation_unit_id_map()
+        return main_header
