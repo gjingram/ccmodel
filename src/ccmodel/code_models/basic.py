@@ -1,8 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Optional, Union, List
+import ccmodel.__config__.ccmodel_config as ccm_cfg
 import os
 import pdb
 
+import ccmodel.code_models.pointers as pointers
+
+ccm_cfg.logger.enable("ccmodel")
+
+
+def register_ptr(ptr: int, variant: "Variant") -> int:
+    pointers.pointer_map[ptr] = variant
+    return ptr
 
 class JsonWrapper(object):
 
@@ -66,8 +75,6 @@ class Variant(ABC):
             out = SkippableVariant()
         else:
             out = cls()
-        if data is None:
-            pdb.set_trace()
         out.load_content(data)
         out._parent = parent
         return out
@@ -85,6 +92,19 @@ class Variant(ABC):
     def get_id(self) -> Optional[str]:
         return None
 
+    def replace_pointers(self) -> None:
+        for attr, val in vars(self).items():
+            if isinstance(val, pointers.Pointer):
+                ptd_to = val()
+                if ptd_to is None and not val._none_ptr:
+                    ccm_cfg.logger.bind(stage_log=True, color="yellow")\
+                            .opt(colors=True)\
+                            .warning(
+                                    f"Pointer {val._pointer} missing its object\n"
+                                    )
+                setattr(self, attr, val())
+        return
+
 
 class SkippableVariant(Variant):
 
@@ -92,16 +112,15 @@ class SkippableVariant(Variant):
         super().__init__()
         self.skipped = False
         self.reason = ""
-        self.id = None
-        self.pointer = None
         return
 
     def load_content(self, obj: dict) -> dict:
         self.skipped = obj["skipped"]
-        self.reason = obj["reason"]
-        self.id = Name.load_json(obj["id"])
-        self.pointer = obj["pointer"]
-        return self.skipped
+        if self.skipped:
+            self.reason = obj["reason"]
+            self.id = Name.load_json(obj["id"])
+            self.pointer = register_ptr(obj["pointer"], self)
+        return self.skipped == True
 
 
 class Include(Variant):
@@ -163,6 +182,8 @@ class Name(Variant):
         return
 
     def write_qual_name(self) -> str:
+        if self.qual_name is None:
+            pdb.set_trace()
         return "::".join(reversed(self.qual_name)).lstrip()
 
     def write_name(self) -> str:
@@ -174,4 +195,4 @@ class Name(Variant):
         return obj
 
     def resolve_names(self) -> None:
-        return
+        pass

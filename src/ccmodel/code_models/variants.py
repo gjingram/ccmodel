@@ -5,20 +5,22 @@ from .basic import (
     SkippableVariant,
     Name,
     SourceRange,
-    SourceLocation
+    SourceLocation,
+    register_ptr
 )
-from .pointers import (
-    Pointer,
-    pointer_map
-)
+import ccmodel.code_models.pointers as pointers
+from ccmodel.utils.code_utils import (
+        split_id,
+        form_id,
+        get_bracketed_list_items
+        )
 from typing import Optional
 import copy
-import pdb
 
 ################################# attrs #######################################
 
 
-class AttrPointer(Pointer):
+class AttrPointer(pointers.Pointer):
 
     def __init__(self, ptr: int, obj: "Variant"):
         super().__init__(ptr, obj)
@@ -54,7 +56,7 @@ class Attribute(Variant):
         return
 
     def load_content(self, obj: dict) -> dict:
-        self.pointer = obj["pointer"]
+        self.pointer = register_ptr(obj["pointer"], self)
         self.location = SourceRange.load_json(obj["location"])
         self.attr = obj["attr"]
         return
@@ -128,7 +130,7 @@ class AttrFactory(object):
         variant = obj["kind"]
         content = obj["content"]
 
-        if "skipped" in content and content["skipped"]:
+        if content["skipped"]:
             out = SkippableVariant.load_json(content)
         if variant == "AvailabilityAttr":
             out = AvailabilityAttr.load_json(content)
@@ -147,8 +149,6 @@ class AttrFactory(object):
         out._save = save
         out._parent = parent
 
-        pointer_map[out.pointer] = out
-
         return out
 
 
@@ -163,7 +163,7 @@ integer_type_widths = {
 }
 
 
-class TypePointer(Pointer):
+class TypePointer(pointers.Pointer):
 
     def __init__(self, ptr: int, obj: "Variant"):
         super().__init__(ptr, obj)
@@ -180,35 +180,79 @@ class Type(Variant):
         return
 
     def load_content(self, obj: dict) -> dict:
-        if not obj:
-            pdb.set_trace()
-        self.pointer = obj["pointer"]
-        self.desugared_type = obj["desugared_type"]
+        self.pointer = register_ptr(obj["pointer"], self)
+        self.desugared_type = TypePointer(obj["desugared_type"], self)
         return obj
+
+    def resolve_type(self) -> str:
+        pass
+
+    def resolve_short_type(self) -> str:
+        pass
 
 
 class QualType(Variant):
 
     def __init__(self):
         super().__init__()
-        self.type_pointer = -1
+        self.type_object = -1
         self.type = ""
         self.canonical = None
         self.is_const = False
         self.is_volatile = False
         self.is_restrict = False
+        pointers.qual_types.append(self)
         return
 
     def load_content(self, obj: dict) -> dict:
         self.kind = "QualType"
-        self.type_pointer = TypePointer(obj["type_pointer"], self)
+        self.type_object = TypePointer(obj["type_pointer"], self)
         self.type = obj["type"]
         self.canonical = obj["canonical"]
         self.is_const = obj["is_const"]
         self.is_restrict = obj["is_restrict"]
         self.is_volatile = obj["is_volatile"]
+
+        if (
+                self.type not in pointers.short_types and
+                len(self.type) > len(self.canonical) and
+                "type-parameter" not in self.type
+            ):
+            pointers.short_types[self.type] = self.canonical
+            new_short_type = True
+        if (
+                self.canonical not in pointers.short_types and
+                len(self.canonical) > len(self.type) and
+                "type-parameter" not in self.canonical
+            ):
+            pointers.short_types[self.canonical] = self.type
+        self.replace_short_type()
+
         return obj
 
+    def resolve_type(self) -> str:
+        return self.resolve_short_type()
+
+    def resolve_short_type(self) -> str:
+        if self.type in pointers.short_types:
+            return pointers.short_types[self.type]
+        elif self.canonical in pointers.short_types:
+            return pointers.short_types[self.canonical]
+        else:
+            return self.type
+
+    def replace_short_type(self) -> None:
+        if (
+                self.type in pointers.short_types and
+                len(self.canonical) < len(pointers.short_types[self.type])
+            ):
+            pointers.short_types[self.type] = self.canonical
+        if (
+                self.canonical in pointers.short_types and
+                len(self.type) < len(pointers.short_types[self.canonical])
+            ):
+            pointers.short_types[self.canonical] = self.type
+        return
 
 class BasicType(Type):
 
@@ -221,6 +265,9 @@ class BasicType(Type):
         Type.load_content(self, obj["type"])
         self.qual_type = QualType.load_json(obj["qual_type"], parent=self)
         return obj
+
+    def resolve_type(self) -> str:
+        return self.qual_type.resolve_type()
 
 
 class AdjustedType(BasicType):
@@ -259,6 +306,9 @@ class ConstantArrayType(ArrayType):
         self.size = obj["size"]
         return obj
 
+    def resolve_type(self) -> str:
+        return self.element_type + f"[{self.size}]"
+
 
 class VariableArrayType(ArrayType):
 
@@ -269,8 +319,11 @@ class VariableArrayType(ArrayType):
 
     def load_content(self, obj: dict) -> dict:
         ArrayType.load_content(self, obj["array_type"])
-        self.pointer = obj["pointer"]
+        self.pointer = register_ptr(obj["pointer"], self)
         return obj
+
+    def resolve_type(self) -> str:
+        return ArrayType.resolve_type(self)
 
 
 class AtomicType(BasicType):
@@ -291,6 +344,9 @@ class AttributedType(Type):
         Type.load_content(self, obj["type"])
         self.attr_kind = obj["attr_kind"]
         return obj
+
+    def resolve_type(self) -> str:
+        return None
 
 
 class BlockPointerType(BasicType):
@@ -313,6 +369,9 @@ class BuiltinType(Type):
         self.type_name = obj["type_name"]
         return obj
 
+    def resolve_type(self) -> str:
+        return self.type_name
+
 
 class DecltypeType(BasicType):
 
@@ -333,6 +392,9 @@ class FunctionType(Type):
         self.return_type = QualType.load_json(obj["return_type"], parent=self)
         return obj
 
+    def resolve_type(self) -> str:
+        return self.return_type.resolve_type()
+
 
 class FunctionProtoType(FunctionType):
 
@@ -347,6 +409,14 @@ class FunctionProtoType(FunctionType):
                 QualType.load_json(x, parent=self) for x in obj["param_types"]
                 ]
         return obj
+
+    def resolve_type(self) -> str:
+        out = FunctionType.resolve_type(self)
+        parm_types = []
+        for parm_type in self.param_types:
+            parm_types.append(parm_type.resolve_type())
+        out += "(" + ", ".join(parm_types) + ")"
+        return out
 
 
 class MemberPointerType(BasicType):
@@ -381,13 +451,20 @@ class TagType(Type):
 
     def __init__(self):
         super().__init__()
-        self.decl_pointer = -1
+        self.decl = -1
         return
 
     def load_content(self, obj: dict) -> dict:
         Type.load_content(self, obj["type"])
-        self.decl_pointer = obj["decl_pointer"]
+        self.decl = DeclPointer(obj["decl_pointer"], self)
         return obj
+
+    def resolve_type(self) -> str:
+        if self.decl.skipped:
+            return "::".join(reversed(self.decl.id.qual_name))
+        return (
+                self.decl.type.resolve_type()
+                )
 
 
 class TypedefType(Type):
@@ -395,7 +472,7 @@ class TypedefType(Type):
     def __init__(self):
         super().__init__()
         self.child_type = None
-        self.decl_pointer = -1
+        self.decl = -1
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -403,8 +480,14 @@ class TypedefType(Type):
         self.child_type = QualType.load_json(
                 obj["child_type"],
                 parent=self)
-        self.decl_pointer = obj["decl_pointer"]
+        self.decl = DeclPointer(obj["decl_pointer"], self)
         return obj
+
+    def resolve_type(self) -> str:
+        if self.decl.skipped:
+            return "::".join(reversed(self.decl.id.qual_name))
+
+        return self.decl.underlying_type.type
 
 
 class TemplateTypeParmType(Type):
@@ -425,12 +508,17 @@ class TemplateTypeParmType(Type):
         self.depth = obj["depth"]
         self.index = obj["index"]
         self.is_pack = obj["is_pack"]
-        self.parameter = obj["parameter"]
+        self.parameter = DeclPointer(obj["parameter"], self)
         self.desugared_type = QualType.load_json(
                 obj["desugared_type"],
                 parent=self
                 )
         return
+
+    def resolve_type(self) -> str:
+        if self.parameter.skipped:
+            return "::".join(reversed(self.parameter.id.qual_name))
+        return self.id
 
 
 class SubstTemplateTypeParmType(Type):
@@ -454,6 +542,9 @@ class SubstTemplateTypeParmType(Type):
                 )
         return obj
 
+    def resolve_type(self) -> str:
+        return self.replacement_type.resolve_type()
+
 
 class TemplateSpecializationType(Type):
 
@@ -469,7 +560,7 @@ class TemplateSpecializationType(Type):
     def load_content(self, obj: dict) -> dict:
         Type.load_content(self, obj["type"])
         self.type_alias = obj["type_alias"]
-        self.template_decl = obj["template_decl"]
+        self.template_decl = DeclPointer(obj["template_decl"], self)
         self.aliased_type = QualType.load_json(
                 obj["aliased_type"],
                 parent=self
@@ -483,6 +574,17 @@ class TemplateSpecializationType(Type):
                 obj["specialization_args"]
                 ]
         return obj
+
+    def resolve_type(self) -> str:
+        if self.template_decl.skipped:
+            out = "::".join(reversed(self.template_decl.qual_name))
+        else:
+            out = self.template_decl.get_qualified_id()
+        args = []
+        for arg in self.specialization_args:
+            args.append(arg.type.resolve_type())
+        out += "<" + ", ".join(args) + ">"
+        return out
 
 
 class InjectedClassNameType(Type):
@@ -506,6 +608,9 @@ class InjectedClassNameType(Type):
                 )
         return obj
 
+    def resolve_type(self) -> str:
+        return self.injected_specialization_type.resolve_type()
+
 
 class DependentNameType(Type):
 
@@ -524,6 +629,9 @@ class DependentNameType(Type):
                 )
         return obj
 
+    def resolve_type(self) -> str:
+        return self.desugared_type.resolve_type()
+
 
 class TypeFactory(object):
 
@@ -534,7 +642,6 @@ class TypeFactory(object):
         if type_obj is None:
             return None
 
-        print("Type!")
         out = None
         variant = type_obj["kind"]
         content = type_obj["content"]
@@ -606,14 +713,13 @@ class TypeFactory(object):
         out._json = type_obj
         out._parent = parent
 
-        pointer_map[out.pointer] = out
         return out
 
 
 ################################# decls #######################################
 
 
-class DeclPointer(Pointer):
+class DeclPointer(pointers.Pointer):
 
     def __init__(self, ptr: int, obj: "Variant"):
         super().__init__(ptr, obj)
@@ -621,7 +727,7 @@ class DeclPointer(Pointer):
         return
 
 
-class StmtPointer(Pointer):
+class StmtPointer(pointers.Pointer):
 
     def __init__(self, ptr: int, obj: "Variant"):
         super().__init__(ptr, obj)
@@ -640,7 +746,7 @@ class Stmt(Variant):
         return
 
     def load_content(self, obj: dict) -> dict:
-        self.pointer = obj["pointer"]
+        self.pointer = register_ptr(obj["pointer"], self)
         self.location = SourceRange.load_json(obj["location"])
         self.content = [
                 StmtFactory.create_variant(stmt, save=False, parent=self) for 
@@ -661,7 +767,7 @@ class FullComment(Variant):
         return
 
     def load_content(self, obj: dict) -> dict:
-        self.parent_pointer = DeclPointer(obj["parent_pointer"], self)
+        self.parent_pointer = register_ptr(obj["parent_pointer"], self)
         self.location = SourceRange.load_json(obj["location"])
         self.text = obj["text"]
         return obj
@@ -688,12 +794,48 @@ class DeclStmt(Stmt):
         return obj
 
 
+class IdContainer(object):
+
+    def __init__(self):
+        super().__init__()
+        self._named_decls = []
+        self._identifier_map = {}
+        return
+
+    def __getitem__(self, iden: str) -> Variant:
+        try:
+            return self._identifier_map[iden]
+        except KeyError:
+            return None
+
+    def ls(self, ilevel: int = 0) -> None:
+        lead_char = "|-" if ilevel else "-"
+        indent = f"{4 * ilevel * ' '}"
+        ccm_id = self._local_ccm_identifier
+        print(f"{indent}{lead_char} {ccm_id}: {type(self).__name__}")
+        for iden, variant in self._identifier_map.items():
+            if iden == ccm_id:
+                continue
+            if isinstance(variant, IdContainer):
+                variant.ls(ilevel + 1)
+                continue
+            indent = f"{4 * (ilevel+1) * ' '}"
+            print(f"{indent}|- {iden}: {type(variant).__name__}")
+        return
+
+    def build_id_map(self) -> None:
+        for ndecl in self._named_decls:
+            ndecl.set_ccm_identifier()
+            self._identifier_map[ndecl._local_ccm_identifier] = ndecl
+        return
+
+
 class Decl(SkippableVariant):
 
     def __init__(self):
         super().__init__()
         self.pointer = -1
-        self.parent_pointer = None
+        self.parent = None
         self.location = None
         self.owning_module = None
         self.is_hidden = False
@@ -709,8 +851,8 @@ class Decl(SkippableVariant):
     def load_content(self, obj: dict) -> None:
         if SkippableVariant.load_content(self, obj):
             return
-        self.pointer = obj["pointer"]
-        self.parent_pointer = DeclPointer(obj["parent_pointer"], self)
+        self.pointer = register_ptr(obj["pointer"], self)
+        self.parent = DeclPointer(obj["parent_pointer"], self)
         self.location = SourceRange.load_json(obj["location"])
         self.owning_module = obj["owning_module"]
         self.is_hidden = obj["is_hidden"]
@@ -720,7 +862,7 @@ class Decl(SkippableVariant):
         self.is_invalid_decl = obj["is_invalid_decl"]
         for attr in obj["attributes"]:
             attr_obj = AttrFactory.create_variant(
-                    attr,
+                    JsonWrapper(attr),
                     save=False,
                     parent=self)
             if attr_obj is not None:
@@ -736,6 +878,8 @@ class NamedDecl(Decl, Name):
 
     def __init__(self):
         super().__init__()
+        self._ccm_identifier = ""
+        self._local_ccm_identifier = ""
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -749,12 +893,29 @@ class NamedDecl(Decl, Name):
     def get_id(self) -> str:
         return Name.write_name(self)
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        self._local_ccm_identifier = self.name
+        if self._parent and "_ccm_identifier" in vars(self._parent):
+            if self._parent._ccm_identifier == "":
+                self._parent.set_ccm_identifier()
+            self._ccm_identifier = "::".join(
+                    [
+                        self._parent._ccm_identifier,
+                        self._local_ccm_identifier
+                        ]
+                    )
+        else:
+            self._ccm_identifier = "::".join(reversed(self.qual_name))
+        return
+
 
 class DeclRef(SkippableVariant):
 
     def __init__(self):
         super().__init__()
-        self.decl_pointer = -1
+        self.decl = -1
         self.id = None
         self.is_hidden = False
         self.qual_type = None
@@ -764,7 +925,7 @@ class DeclRef(SkippableVariant):
         if SkippableVariant.load_content(self, obj):
             return
         self.kind = "DeclRef"
-        self.decl_pointer = DeclPointer(obj["decl_pointer"], self)
+        self.decl = DeclPointer(obj["decl_pointer"], self)
         self.id = obj["id"]
         self.is_hidden = obj["is_hidden"]
         self.qual_type = QualType.load_json(obj["qual_type"], parent=self)
@@ -829,6 +990,7 @@ class CXXCtorInitializer(Variant):
         self.declaration = None
         self.qualified_type = -1
         self.virtual_base = False
+        self.init_expr = None
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -836,25 +998,8 @@ class CXXCtorInitializer(Variant):
         self.declaration = DeclRef.load_json(obj["declaration"], parent=self)
         self.qualified_type = TypePointer(obj["qualified_type"], self)
         self.virtual_base = obj["virtual_base"]
+        self.init_expr = StmtFactory.create_variant(obj["init_expr"])
         return obj
-
-
-class IdContainer(object):
-
-    def __init__(self):
-        super().__init__()
-        self._identifier_map = {}
-        return
-
-    def __getitem__(self, iden: str) -> Variant:
-        try:
-            return self._identifier_map[iden]
-        except KeyError:
-            return None
-    def ls(self) -> None:
-        for iden, variant in self._identifier_map.items():
-            print(f"{type(variant).__name__}: {iden}")
-        return
 
 
 class DeclContext(SkippableVariant, IdContainer):
@@ -865,6 +1010,11 @@ class DeclContext(SkippableVariant, IdContainer):
         self.has_external_lexical_storage = None
         self.has_external_visible_storage = None
         self.declarations = []
+        self.context_pointer = -1
+        self.n_anonymous_fields = 0
+        self.n_anonymous_enums = 0
+        self.n_anonymous_namespaces = 0
+        self.n_anonymous_unions = 0
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -884,8 +1034,10 @@ class DeclContext(SkippableVariant, IdContainer):
                     parent=self)
             if decl_obj is not None:
                 self.declarations.append(decl_obj)
-                if decl_obj.get_qualified_id() is not None:
-                    self._identifier_map[decl_obj.get_id()] = decl_obj
+            if isinstance(decl_obj, NamedDecl):
+                self._named_decls.append(decl_obj)
+        self.context_pointer = obj["pointer"]
+
         return obj
 
 
@@ -928,18 +1080,34 @@ class NamespaceDecl(NamedDecl, DeclContext):
         self.original_namespace = obj["original_namespace"]
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        if self.name == "":
+            self.name = (
+            f"__anonymous_namespace{self._parent.n_anonymous_namespaces}"
+            )
+            self.qual_name[0] = self.name
+            self._parent.n_anonymous_namespaces += 1
+        NamedDecl.set_ccm_identifier(self)
+        return
+
 
 class TypeDecl(NamedDecl):
 
     def __init__(self):
         super().__init__()
-        self.type_pointer = -1
+        self.type = -1
         return
 
     def load_content(self, obj: dict) -> dict:
         NamedDecl.load_content(self, obj["named_decl"])
-        self.type_pointer = TypePointer(obj["type_pointer"], self)
+        self.type = TypePointer(obj["type_pointer"], self)
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
 
 
 class TagDecl(TypeDecl, DeclContext):
@@ -967,6 +1135,10 @@ class ValueDecl(NamedDecl, QualType):
         QualType.load_content(self, obj["qualified_type"])
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
+
 
 class TranslationUnitDecl(DeclContext):
     
@@ -974,7 +1146,6 @@ class TranslationUnitDecl(DeclContext):
         super().__init__()
         self.referenced_decls = []
         self.referenced_types = []
-        self._pointers = {}
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -991,16 +1162,17 @@ class TranslationUnitDecl(DeclContext):
                     TypeFactory.create_variant(JsonWrapper(type_),
                         parent=self)
                     )
-        
+        self.pointer = register_ptr(obj["pointer"], self)
         return obj
 
 
-class TypedefDecl(TypeDecl):
+class TypedefDecl(TypeDecl, IdContainer):
 
     def __init__(self):
         super().__init__()
         self.underlying_type = None
         self.is_module_private = False
+        pointers.typedefs.append(self)
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -1011,10 +1183,44 @@ class TypedefDecl(TypeDecl):
         self.is_module_private = obj["is_module_private"]
         return obj
 
+    def link_typedef(self) -> None:
+        if (
+                "desugared_type" not in
+                vars(self.underlying_type.type_object)
+            ):
+            return
+        if self.underlying_type.type_object.desugared_type is None:
+            return
+        if (
+                isinstance(
+                    self.underlying_type.type_object.desugared_type,
+                    TagType
+                    ) and
+                isinstance(
+                    self.underlying_type.type_object.desugared_type.decl,
+                    IdContainer
+                    )
+            ):
+            self._identifier_map = copy.deepcopy(
+                    self.underlying_type.type_object.desugared_type
+                    .decl._identifier_map
+                    )
+            for decl in self._identifier_map.values():
+                decl._parent = self
+                decl.name = decl.name if decl.name != "" else self.name
+                decl.qual_name = [
+                        decl.name,
+                        *self.qual_name
+                        ]
+                decl._ccm_identifier = ""
+                decl.set_ccm_identifier()
+
+        return
+
 
 class EnumDecl(TagDecl):
 
-    def __init__(self):
+    def _init__(self):
         super().__init__()
         self.scope = ""
         self.is_module_private = False
@@ -1026,12 +1232,32 @@ class EnumDecl(TagDecl):
         self.is_module_private = obj["is_module_private"]
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        id_parts = self.qual_name
+        name = id_parts[0]
+        anon_enum = any(["anonymous_enum" in x for x in id_parts])
+        if anon_enum:
+            id_parts = [
+                    idp for idp in id_parts if
+                    not "anonymous_enum" in
+                    idp
+                    ]
+            self.name = f"__anonymous_enum{self._parent.n_anonymous_enums}"
+            self.qual_name[0] = self.name
+            self._parent.n_anonymous_enums += 1
+            pointers.short_types[name] = self.name
+        self._local_ccm_identifier = self.name
+        self._ccm_identifier = self.get_qualified_id()
+        return
+
 
 class RecordDecl(TagDecl):
 
     def __init__(self):
         super().__init__()
-        self.definition_pointer = -1
+        self.definition = -1
         self.is_module_private = False
         self.is_complete_definition = False
         self.is_dependent_type = False
@@ -1039,7 +1265,7 @@ class RecordDecl(TagDecl):
 
     def load_content(self, obj: dict) -> dict:
         TagDecl.load_content(self, obj["tag_decl"])
-        self.definition_pointer = DeclPointer(obj["definition_pointer"], self)
+        self.definition = DeclPointer(obj["definition_pointer"], self)
         self.is_module_private = obj["is_module_private"]
         self.is_complete_definition = obj["is_complete_definition"]
         self.is_dependent_type = obj["is_dependent_type"]
@@ -1064,18 +1290,33 @@ class EnumConstantDecl(ValueDecl):
         self.value = obj["value"]
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        id_parts = self.qual_name
+        self._local_ccm_identifier = id_parts[0]
+        self._ccm_identifier = "::".join(reversed(id_parts))
+        self.name = id_parts[0]
+        self.qual_name = id_parts[1:]
+        return
+
 
 class IndirectFieldDecl(ValueDecl):
     
     def __init__(self):
         super().__init__()
         self.decl_refs = []
+        self.direct = None
         return
 
     def load_content(self, obj: dict) -> dict:
         ValueDecl.load_content(self, obj["value_decl"])
         self.decl_refs = [DeclRef.load_json(x, parent=self) for
                 x in obj["decl_refs"]]
+        self.direct = DeclPointer(
+                self.decl_refs[-1].decl._pointer,
+                self
+                )
         return obj
 
 
@@ -1117,8 +1358,7 @@ class FunctionDecl(ValueDecl, IdContainer):
                 x in obj["parameters"]
                 ]
         for param in [x for x in self.parameters if x is not None]:
-            param.resolve_names()
-            self._identifier_map[param.get_id()] = param
+            self._named_decls.append(param)
 
         self.template_specialization = (
                 TemplateSpecialization.load_json(
@@ -1127,11 +1367,54 @@ class FunctionDecl(ValueDecl, IdContainer):
                     )
                 )
         if self.template_specialization is not None:
-            self._identifier_map[self.template_specialization.get_id()] = (
-                    self.template_specialization
-                    )
+            self._named_decls.append(self.template_specialization)
 
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        NamedDecl.set_ccm_identifier(self)
+        self._local_ccm_identifier += self.get_arg_list()
+        self._ccm_identifier += self.get_arg_list()
+        return
+
+    def get_arg_list(self) -> str:
+        parms = []
+        for parm in self.parameters:
+            parm_repr = ""
+            if (
+                    isinstance(
+                    parm.type_object,
+                    BasicType) and
+                    isinstance(
+                        parm.type_object.qual_type.type_object,
+                        TemplateTypeParmType
+                        )
+            ):
+                parameter = parm.type_object.resolve_type()
+                type_ = parm.type
+                parm_repr = (
+                        type_.replace(
+                            parameter,
+                            parm.type_object.qual_type.type_object.parameter\
+                                    .parm_repr()
+                                    )
+                        )
+            elif isinstance(parm.type_object, TemplateTypeParmType):
+                parameter = parm.type_object.resolve_type()
+                type_ = parm.type
+                parm_repr = type_.replace(
+                        parameter,
+                        parm.type_object.parameter.parm_repr()
+                        )
+            else:
+                parm_repr = parm.type
+
+            parms.append(parm_repr)
+
+        arg_list = "(" + ", ".join(parms) + ")"
+        return arg_list
 
 
 class FieldDecl(ValueDecl):
@@ -1161,6 +1444,20 @@ class FieldDecl(ValueDecl):
                 )
 
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        NamedDecl.set_ccm_identifier(self)
+        self._local_ccm_identifier = self._local_ccm_identifier.replace(
+                "__anon_field_",
+                "__anonymous_field"
+                )
+        self._ccm_identifier = self._ccm_identifier.replace(
+                "__anon_field_",
+                "__anonymous_field"
+                )
+        return
 
 
 class VarDecl(ValueDecl):
@@ -1203,6 +1500,16 @@ class VarDecl(ValueDecl):
                 obj["parm_index_in_function"]
                 )
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        if self.name == "":
+            self.name = f"__anonymous_field{self._parent.n_anonymous_fields}"
+            self.qual_name[0] = self.name
+            self._parent.n_anonymous_fields += 1
+        NamedDecl.set_ccm_identifier(self)
+        return
 
 
 class ImportDecl(Decl):
@@ -1248,6 +1555,19 @@ class UsingDirectiveDecl(NamedDecl):
                 )
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        self._ccm_identifier = "<using-directive "
+        self._ccm_identifier += self.location.file
+        self._ccm_identifier += (
+                ":" +
+                str(self.location.begin.line)
+                + ">"
+                )
+        self._local_ccm_identifier = self._ccm_identifier
+        return
+
 
 class NamespaceAliasDecl(NamedDecl):
 
@@ -1273,6 +1593,10 @@ class NamespaceAliasDecl(NamedDecl):
                 ]
         self.namespace = DeclRef.load_json(obj["namespace"], parent=self)
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
 
 
 class ClassBase(Variant):
@@ -1305,6 +1629,11 @@ class CXXRecordDecl(RecordDecl):
         self.destructor = None
         self.lambda_call_operator = None
         self.lambda_captures = []
+        self.is_struct = False
+        self.is_interface = False
+        self.is_class = False
+        self.is_union = False
+        self.is_enum = False
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -1316,12 +1645,10 @@ class CXXRecordDecl(RecordDecl):
                 ClassBase.load_json(x, parent=self) for x in obj["bases"]
                 ]
         self.is_pod = obj["is_pod"]
-        self.destructor = (
-                DeclRef.load_json(
-                    obj["destructor"],
-                    parent=self
-                    )
-                )
+        dtor_names = copy.copy(self.qual_name)
+        dtor_names[0] = "~" + dtor_names[0]
+        self.destructor = "::".join(reversed(dtor_names))
+        self.destructor += "()"
         self.lambda_call_operator = (
                 DeclRef.load_json(
                     obj["lambda_call_operator"],
@@ -1332,7 +1659,26 @@ class CXXRecordDecl(RecordDecl):
                 LambdaCapture.load_json(x, parent=self) for
                 x in obj["lambda_captures"]
                 ]
+        self.is_struct = obj["is_struct"]
+        self.is_interface = obj["is_interface"]
+        self.is_class = obj["is_class"]
+        self.is_union = obj["is_union"]
+        self.is_enum = obj["is_enum"]
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        if self.is_union and self.name == "":
+            anon_name = self.qual_name[0]
+            self.name = f"__anonymous_union{self._parent.n_anonymous_unions}"
+            self.qual_name[0] = self.name
+            self._parent.n_anonymous_unions += 1
+            pointers.short_types[anon_name] = (
+                    self.get_qualified_id()
+                    )
+        NamedDecl.set_ccm_identifier(self)
+        return
 
 
 class TemplateArgument(Variant):
@@ -1340,7 +1686,7 @@ class TemplateArgument(Variant):
     def __init__(self):
         super().__init__()
         self.kind = ""
-        self.type = ""
+        self.type = None
         self.pointer = -1
         self.integer = None
         self.parameter_pack = []
@@ -1348,48 +1694,33 @@ class TemplateArgument(Variant):
 
     def load_content(self, obj: dict) -> dict:
         self.kind = obj["kind"]
-        self.type = obj["type"]
+        self.type = QualType.load_json(obj["type"])
         self.pointer = DeclPointer(obj["pointer"], self)
         self.integer = obj["integer"]
         self.parameter_pack = [
                 TemplateArgument.load_json(x, parent=self) for
                 x in obj["parameter_pack"]]
+        self.clang_kind = "TemplateArgument"
+        self._json = obj
         return obj
 
 
-class TemplateSpecialization(Variant):
+class TemplateSpecialization(Variant, IdContainer):
 
     def __init__(self):
         super().__init__()
-        self.template_decl = -1
+        self.template = -1
         self.specialization_args = []
         return
 
     def load_content(self, obj: dict) -> dict:
-        self.template_decl = DeclPointer(obj["template_decl"], self)
+        self.template = DeclPointer(obj["template_decl"], self)
         self.specialization_args = [
                 TemplateArgument.load_json(x, parent=self) for
                 x in obj["specialization_args"]
                 ]
         return obj
 
-
-class TemplateSpecialization(Variant):
-
-    def __init__(self):
-        super().__init__()
-        self.template_decl = -1
-        self.specialization_args = []
-        return
-
-    def load_content(self, obj: dict) -> dict:
-        self.template_decl = DeclPointer(obj["template_decl"], self)
-        self.specialization_args = [
-                TemplateArgument.load_json(x, parent=self) for
-                x in obj["specialization_args"]
-                ]
-        return obj
-   
 
 class ClassTemplateSpecializationDecl(CXXRecordDecl, TemplateSpecialization):
 
@@ -1403,6 +1734,75 @@ class ClassTemplateSpecializationDecl(CXXRecordDecl, TemplateSpecialization):
         TemplateSpecialization.load_content(self, obj["specialization"])
         self.mangled_name = obj["mangled_name"]
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        NamedDecl.set_ccm_identifier(self)
+        ccm_id_parts = split_id(self._ccm_identifier)
+        self._ccm_identifier = ccm_id_parts[0]
+        arg_repr = (
+                "<" +
+                self.get_arglist_repr(self.specialization_args) +
+                ">"
+                )
+        self._ccm_identifier += arg_repr
+        self._local_ccm_identifier += arg_repr
+        return
+
+    def get_arglist_repr(self, args: list) -> str:
+        arg_repr = []
+        for arg in args:
+            if arg.kind == "Type":
+                if isinstance(
+                        arg.type.type_object,
+                        TemplateTypeParmType
+                ):
+                    if (
+                            arg.type.type_object.variadic and
+                            not arg.type.type_object.is_pack
+                    ):
+                        arg_repr.append("[#...]")
+                    elif "type-parameter" in arg.type.type:
+                        arg_repr.append("#")
+                        self._identifier_map[arg.type.resolve_type()] = arg
+                else:
+                    arg_repr.append(arg.type.resolve_type())
+            elif arg.kind == "Template":
+                decl = arg.pointer()
+                if (
+                        decl.kind != "TemplateTemplateParmDecl"
+                    ):
+                    decl.set_ccm_identifier()
+                    arg_repr.append(decl._ccm_identifier)
+                else:
+                    self._identifier_map[arg.pointer().id.name] = arg
+                    arg_repr.append("#")
+            elif arg.kind == "Null":
+                arg_repr.append("null")
+            elif arg.kind == "Declaration":
+                arg_repr.append(
+                        pointers.pointer_map[arg.pointer]._ccm_identifier
+                        )
+            elif arg.kind == "NullPtr":
+                arg_repr.append("nullptr")
+            elif arg.kind == "Integral":
+                arg_repr.append(str(arg.integer))
+            elif arg.kind == "TemplateExpansion":
+                arg_repr.append("#")
+            elif arg.kind == "Expression":
+                arg_repr.append("(expr)")
+            elif arg.kind == "Pack":
+                if len(arg.parameter_pack):
+                    arg_repr.append(
+                            "{" +
+                            f"{self.get_arglist_repr(arg.parameter_pack)}" +
+                            "}"
+                            )
+                else:
+                    arg_repr.append("[#...]")
+
+        return ", ".join(arg_repr)
 
 
 class CXXMethodDecl(FunctionDecl):
@@ -1431,6 +1831,16 @@ class CXXMethodDecl(FunctionDecl):
                 ]
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        FunctionDecl.set_ccm_identifier(self)
+        if self.is_const or "const" in split_id(self.type):
+            self.is_const = True
+            self._local_ccm_identifier += " const"
+            self._ccm_identifier += " const"
+        return
+
 
 class CXXConstructorDecl(CXXMethodDecl):
 
@@ -1450,17 +1860,48 @@ class CXXConstructorDecl(CXXMethodDecl):
         self.is_converting_ctor = obj["is_converting_ctor"]
         return obj
 
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        if self.name == "":
+            self.name = self._parent.name
+            self.qual_name[0] = self._parent.name
+        FunctionDecl.set_ccm_identifier(self)
+        ccm_id_parts = split_id(self._ccm_identifier)
+        if (
+                isinstance(self._parent, ClassTemplateDecl) or
+                isinstance(self._parent, ClassTemplateSpecializationDecl)
+        ):
+            fname_end_idx = -2
+            for rev_part_idx, part in enumerate(reversed(ccm_id_parts)):
+                if part.startswith("<"):
+                    fname_end_idx = -(rev_part_idx + 1)
+                    break
+                elif part.startswith("::"):
+                    fname_end_idx = -rev_part_idx
+                    break
+            fname = ccm_id_parts[:fname_end_idx]
+            arg_list = ccm_id_parts[-1]
+            self._local_ccm_identifier = (
+                    form_id([fname[-1], arg_list]).strip("::")
+                    )
+            ccm_id_parts = [*fname, arg_list]
+        self._ccm_identifier = form_id(ccm_id_parts)
+        return
+
 
 class ClassTemplateDecl(CXXRecordDecl):
 
     def __init__(self):
         super().__init__()
+        self.template_decl = None
         self.parameters = []
         self.specializations = []
         self.partial_specializations = []
         return
 
     def load_content(self, obj: dict) -> dict:
+        self.template_decl = NamedDecl.load_json(obj["named_decl"])
         CXXRecordDecl.load_content(self, obj["cxx_record"])
         for xx in obj["parameters"]:
             if xx["param_type"] == "TemplateTypeParam":
@@ -1476,58 +1917,64 @@ class ClassTemplateDecl(CXXRecordDecl):
                         TemplateTemplateParmDecl.load_json(xx, parent=self)
                         )
             self.parameters[-1]._save = False
-            self.parameters[-1].resolve_names()
-            self._identifier_map[self.parameters[-1].get_id()] = (
-                    self.parameters[-1]
-                    )
+            self._named_decls.append(self.parameters[-1])
         self.specializations = [
-                ClassTemplateSpecializationDecl.load_json(x, parent=self) for
+                ClassTemplateSpecializationDecl.load_json(x, parent=self._parent) for
                 x in obj["specializations"]
                 ]
         for spec in self.specializations:
             spec._save = False
-            self._identifier_map[spec.get_id()] = spec
         self.partial_specializations = [
                 ClassTemplatePartialSpecializationDecl.load_json(
                     x,
-                    parent=self
+                    parent=self._parent
                     ) for
                 x in obj["partial_specializations"]
                 ]
         for pspec in self.partial_specializations:
             pspec._save = False
-            self._identifier_map[pspec.get_id()] = pspec
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        NamedDecl.set_ccm_identifier(self)
+        parm_reprs = []
+        for parm in self.parameters:
+            parm_reprs.append(parm.parm_repr())
+        parm_list = "<" + ", ".join(parm_reprs) + ">"
+        self._local_ccm_identifier += parm_list
+        self._ccm_identifier += parm_list
+        return
 
 
 class FunctionTemplateDecl(FunctionDecl):
 
     def __init__(self):
         super().__init__()
-        self.parameters = []
+        self.template_decl = None
+        self.template_parameters = []
         self.specializations = []
         return
 
     def load_content(self, obj: dict) -> dict:
+        self.template_decl = NamedDecl.load_json(obj["named_decl"])
         FunctionDecl.load_content(self, obj["function"])
         for xx in obj["parameters"]:
             if xx["param_type"] == "TemplateTypeParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateTypeParmDecl.load_json(xx, parent=self)
                         )
             elif xx["param_type"] == "TemplateNonTypeParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateNonTypeParmDecl.load_json(xx, parent=self)
                         )
             elif xx["param_type"] == "TemplateTemplateParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateTemplateParmDecl.load_json(xx, parent=self)
                         )
-            self.parameters[-1]._save = False
-            self.parameters[-1].resolve_names()
-            self._identifier_map[self.parameters[-1].get_id()] = (
-                    self.parameters[-1]
-                    )
+            self.template_parameters[-1]._save = False
+            self._named_decls.append(self.template_parameters[-1])
         self.specializations = [
                 DeclFactory.create_variant(
                     JsonWrapper(x),
@@ -1536,9 +1983,25 @@ class FunctionTemplateDecl(FunctionDecl):
                 x in obj["specializations"]
                 ]
         for spec in [x for x in self.specializations if x is not None]:
-            self._identifier_map[spec.get_id()] = spec
+            self._named_decls.append(spec)
 
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        if self._ccm_identifier != "":
+            return
+        NamedDecl.set_ccm_identifier(self)
+        parm_reprs = []
+        for parm in self.template_parameters:
+            parm_reprs.append(parm.parm_repr())
+        parm_list = "<" + ", ".join(parm_reprs) + ">"
+
+        self._local_ccm_identifier += parm_list
+        self._local_ccm_identifier += self.get_arg_list()
+      
+        self._ccm_identifier += parm_list
+        self._ccm_identifier += self.get_arg_list()
+        return
 
 
 class FriendDecl(Decl):
@@ -1586,35 +2049,32 @@ class TypeAliasTemplateDecl(TypeAliasDecl, IdContainer):
     def __init__(self):
         super().__init__()
         self.canonical_decl = -1
-        self.parameters = []
-        self.member_template_decl = -1
+        self.template_parameters = []
+        self.member_template = -1
         return
 
     def load_content(self, obj: dict) -> dict:
         TypeAliasDecl.load_content(self, obj["type_alias_decl"])
-        self.canonical_decl = DeclPointer(obj["canonical_decl"], self)
+        self.canonical_decl = register_ptr(obj["canonical_decl"], self)
         for xx in obj["parameters"]:
             if xx["param_type"] == "TemplateTypeParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateTypeParmDecl.load_json(
                             xx,
                             parent=self
                             )
                         )
             elif xx["param_type"] == "TemplateNonTypeParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateNonTypeParmDecl.load_json(xx, parent=self)
                         )
             elif xx["param_type"] == "TemplateTemplateParam":
-                self.parameters.append(
+                self.template_parameters.append(
                         TemplateTemplateParmDecl.load_json(xx, parent=self)
                         )
-            self.parameters[-1]._save = False
-            self.parameters[-1].resolve_names()
-            self._identifier_map[self.parameters[-1].get_id()] = (
-                    self.parameters[-1]
-                    )
-        self.member_template_decl = DeclPointer(
+            self.template_parameters[-1]._save = False
+            self._named_decls.append(self.template_parameters[-1])
+        self.member_template = DeclPointer(
                 obj["member_template_decl"],
                 self
                 )
@@ -1645,14 +2105,21 @@ class ParmDecl(Name):
 
     def resolve_names(self) -> None:
         self.is_anonymous = self.name == ""
+        param_prefix = (
+                "f" if isinstance(self._parent, FunctionDecl) else
+                "t"
+                )
         self.name = (
                 self.name if not self.is_anonymous
-                else "param" + str(self.index)
+                else param_prefix + "param" + str(self.index)
                 )
-        self.qual_name = (
-                copy.copy(self._parent.qual_name)
-                .append(self.name)
-                )
+        self.qual_name = [self.name]
+        self.qual_name.append(self._parent._ccm_identifier)
+        return
+
+    def set_ccm_identifier(self) -> None:
+        self.resolve_names()
+        NamedDecl.set_ccm_identifier(self)
         return
 
 
@@ -1661,7 +2128,7 @@ class TemplateTypeParmDecl(TypeDecl, ParmDecl):
     def __init__(self):
         super().__init__()
         self.param_type = ""
-        self.template_decl = -1
+        self.template = -1
         self.with_typename = False
         self.depth = -1
         self.is_parameter_pack = False
@@ -1672,7 +2139,7 @@ class TemplateTypeParmDecl(TypeDecl, ParmDecl):
         if SkippableVariant.load_content(self, obj):
             return
         TypeDecl.load_content(self, obj["type_decl"])
-        self.template_decl = DeclPointer(obj["template_decl"], self)
+        self.template = DeclPointer(obj["template_decl"], self)
         self.param_type = obj["param_type"]
         self.with_typename = obj["with_typename"]
         self.index = obj["index"]
@@ -1684,13 +2151,27 @@ class TemplateTypeParmDecl(TypeDecl, ParmDecl):
                 )
         return obj
 
+    def parm_repr(self) -> str:
+        repres = ""
+        if self.default:
+            repres = "[" + self.default.type + "]"
+        else:
+            repres = "#"
+        if self.is_parameter_pack:
+            repres = "[" + repres + "...]"
+        return repres
+
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
+
 
 class TemplateNonTypeParmDecl(ValueDecl, ParmDecl):
 
     def __init__(self):
         super().__init__()
         self.param_type = ""
-        self.template_decl = -1
+        self.template = -1
         self.depth = -1
         self.is_parameter_pack = False
         self.type = None
@@ -1702,7 +2183,7 @@ class TemplateNonTypeParmDecl(ValueDecl, ParmDecl):
             return
         ValueDecl.load_content(self, obj["value_decl"])
         self.param_type = obj["param_type"]
-        self.template_decl = DeclPointer(obj["template_decl"], self)
+        self.template = DeclPointer(obj["template_decl"], self)
         self.index = obj["index"]
         self.depth = obj["depth"]
         self.is_parameter_pack = obj["is_parameter_pack"]
@@ -1710,13 +2191,27 @@ class TemplateNonTypeParmDecl(ValueDecl, ParmDecl):
         self.default = obj["default"]
         return obj
 
+    def parm_repr(self) -> str:
+        repres = f"{self.type.type}"
+        if self.default:
+            repres += f"[{self.default}]"
+        else:
+            repres += "#"
+        if self.is_parameter_pack:
+            repres = "[" + repres + "...]"
+        return repres
+
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
+
 
 class TemplateTemplateParmDecl(NamedDecl, ParmDecl):
 
     def __init__(self):
         super().__init__()
         self.param_type = ""
-        self.template_decl = -1
+        self.template = -1
         self.depth = -1
         self.is_parameter_pack = False
         self.default = None
@@ -1727,12 +2222,26 @@ class TemplateTemplateParmDecl(NamedDecl, ParmDecl):
             return
         NamedDecl.load_content(self, obj["named_decl"])
         self.param_type = obj["param_type"]
-        self.template_decl = DeclPointer(obj["template_decl"], self)
+        self.template = DeclPointer(obj["template_decl"], self)
         self.index = obj["index"]
         self.depth = obj["depth"]
         self.is_parameter_pack = obj["is_parameter_pack"]
         self.default = obj["default"]
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        NamedDecl.set_ccm_identifier(self)
+        return
+
+    def parm_repr(self) -> str:
+        repres = ""
+        if self.default:
+            repres = "[" + self.default + "]"
+        else:
+            repres = "#"
+        if self.is_parameter_pack:
+            repres = "[" + "#" + "...]"
+        return repres
 
 
 class ParmVarDecl(ValueDecl, ParmDecl):
@@ -1749,6 +2258,10 @@ class ParmVarDecl(ValueDecl, ParmDecl):
         self.default_value = obj["default_value"]
         self.index = obj["index"]
         return obj
+
+    def set_ccm_identifier(self) -> None:
+        ParmDecl.set_ccm_identifier(self)
+        return
     
 
 class DeclFactory(object):
@@ -1758,7 +2271,6 @@ class DeclFactory(object):
             save: bool = True,
             parent: Optional["Variant"] = None) -> "Decl":
 
-        print("Decl!")
         if obj is None:
             return None
 
@@ -1766,9 +2278,11 @@ class DeclFactory(object):
         variant = obj["kind"]
         content = obj["content"]
 
-        if content["skipped"]:
+        if content is None and obj["skipped"]:
+            out = SkippableVariant.load_json(obj)
+        elif content["skipped"]:
             out = SkippableVariant.load_json(content)
-        if variant == "CapturedDecl":
+        elif variant == "CapturedDecl":
             out = CapturedDecl.load_json(content)
         elif variant == "LinkageSpecDecl":
             out = LinkageSpecDecl.load_json(content)
@@ -1839,7 +2353,6 @@ class DeclFactory(object):
         out._json = obj
         out._parent = parent
 
-        pointer_map[out.pointer] = out
         return out
 
 
@@ -1859,9 +2372,11 @@ class StmtFactory(object):
         variant = obj["kind"]
         content = obj["content"]
 
-        if content["skipped"]:
+        if content is None and obj["skipped"]:
+            out = SkippableVariant.load_json(obj)
+        elif content["skipped"]:
             out = SkippableVariant.load_json(content)
-        if variant == "Stmt":
+        elif variant == "Stmt":
             out = Stmt.load_json(content, parent=self)
         elif variant == "DeclStmt":
             out = DeclStmt.load_json(content, parent=self)
@@ -1874,7 +2389,6 @@ class StmtFactory(object):
         out._json = obj
         out._parent = parent
 
-        pointer_map[out.pointer] = out
         return out
 
 
@@ -2075,9 +2589,11 @@ class ExprFactory(object):
         variant = obj["kind"]
         content = obj["content"]
 
-        if content["skipped"]:
+        if content is None and obj["skipped"]:
+            out = SkippableVariant.load_json(obj)
+        elif content["skipped"]:
             out = SkippableVariant.load_json(content)
-        if variant == "CXXBaseSpecifier":
+        elif variant == "CXXBaseSpecifier":
             out = CXXBaseSpecifier.load_json(content)
         elif variant == "DeclRefExpr":
             out = DeclRefExpr.load_json(content)
@@ -2107,5 +2623,4 @@ class ExprFactory(object):
         out._save = save
         out._json = obj
 
-        pointer_map[out.pointer] = out
         return out

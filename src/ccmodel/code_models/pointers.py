@@ -3,6 +3,10 @@ import copy
 import pdb
 
 pointer_map = {}
+qual_types = []
+short_types = {}
+typedefs = []
+
 
 class Pointer(object):
 
@@ -10,6 +14,7 @@ class Pointer(object):
         obj._references.append(self)
         self._factory = None
         self._pointer = ptr
+        self._none_ptr = ptr is None
         return
 
     def __call__(self) -> "Variant":
@@ -18,4 +23,4 @@ class Pointer(object):
                 not self._pointer in pointer_map
         ):
                 return None
-        return self.poiner_map[self._pointer]
+        return pointer_map[self._pointer]
