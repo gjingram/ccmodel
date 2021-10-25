@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import asyncio
 import copy
 import orjson as json
@@ -67,8 +68,6 @@ ccm_cl.add_argument(
         "-do",
         "--delete-out",
         help="Delete output directory, if it exists",
-        type=bool,
-        default=False,
         action="store_true"
         )
 ccm_cl.add_argument(
@@ -153,18 +152,18 @@ def handle_command_line() -> Tuple[argparse.Namespace, argparse.Namespace]:
         ccmodel_config.logger.bind(stage_log=True, color="red").error(
                 "No input files specified\n"
                 )
-        raise RuntimeError
+        sys.exit(-1)
 
     return
 
-def set_main_include_paths() -> None:
+def set_main_include_paths() -> bool:
     ccm_opt.ccm_files = []
     for main_inc in main_includes:
         search_path = main_inc.search_path
         file_ = main_inc.file
         ccm_opt.ccm_files.append(file_)
     ccm_opt.ccm_files = list(set(ccm_opt.ccm_files))
-    return
+    return bool(len(ccm_opt.ccm_files))
 
 def call_clang() -> None:
 
@@ -210,7 +209,7 @@ def call_clang() -> None:
                 .error(
                 "Clang tool backend type resolution failed\n"
                 )
-        raise RuntimeError
+        sys.exit(-1)
     toc = time.perf_counter()
 
     ccmodel_config.logger.bind(stage_log=True, color="green")\
@@ -251,7 +250,9 @@ def remove_host(path: str) -> str:
     return os.path.normpath(path)
 
 def ccm_process() -> None:
+    global main_includes
 
+    main_includes = []
     for ccs_file, clang_file, full_file in get_clang_out():
 
         tic = time.perf_counter()
@@ -350,7 +351,7 @@ def make_output_directories() -> None:
                 f'"{ccm.out_dir}" and is not a directory.\n' +
                 " Please delete or relocate.\n"
                 )
-        raise RuntimeError
+        sys.exit(-1)
     elif not os.path.exists(ccm_opt.out_dir):
         if (
                 ccm_opt.delete_out and not
@@ -383,7 +384,6 @@ def make_output_directories() -> None:
 def ensure_cleanup() -> None:
     warning_issued = False
     for _, clang_file, _ in get_clang_out():
-
         if os.path.exists(clang_file):
             if not warning_issued:
                 ccmodel_config.logger.bind(stage_log=True, color="orange")\

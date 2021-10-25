@@ -103,7 +103,7 @@ def _find_tool():
             ccm_logger.bind(stage_log=True, color="red")\
                     .opt(colors=True)\
                     .info(fail_text + "\n")
-            print()
-            raise RuntimeError
+            sys.exit(-1)
+            
 
     return 

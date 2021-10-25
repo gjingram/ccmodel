@@ -8,8 +8,7 @@ import ccmodel.code_models.pointers as pointers
 
 import orjson as json
 import os
-from typing import List
-import pdb
+from typing import List, Dict
 
 
 class Header(object):
@@ -45,13 +44,15 @@ class Header(object):
         return None
 
     def parse_translation_unit(self) -> None:
-        pdb.set_trace()
         self.translation_unit = (
                 variants.DeclFactory.create_variant(self.ccs["translation_unit"])
                 )
         return
 
-    def merge_includes(self, inc: List["Header"]) -> None:
+    def merge_includes(self, inc: Dict[str, "Header"]) -> None:
+        inc_files = [
+                x.file for x in self.includes
+                ]
         merged = []
         for ptr, variant in pointers.pointer_map.items():
             if (
@@ -62,7 +63,11 @@ class Header(object):
                 continue
             variant_type = variant.kind
             variant_id = "::".join(reversed(variant.id.qual_name))
-            for include in inc:
+            valid_includes = [
+                    x for x in inc.values() if
+                    x.file in inc_files
+                    ]
+            for include in valid_includes:
                 if (
                         variant_id in include._all_ids and
                         variant_type == 
@@ -79,7 +84,6 @@ class Header(object):
         for typedef in pointers.typedefs:
             typedef.link_typedef()
         self._pointer_map = dict(sorted(pointers.pointer_map.items()))
-        pdb.set_trace()
         return
 
     def build_all_ids_map(self) -> None:
@@ -96,14 +100,12 @@ class Header(object):
             processed.append(named_decl)
             if isinstance(named_decl, variants.IdContainer):
                 named_decl.build_id_map()
-        pdb.set_trace()
         return
 
     def build_translation_unit_id_map(self) -> None:
         for name, val in self._all_ids.items():
             if isinstance(val._parent, variants.TranslationUnitDecl):
                 self._translation_unit_ids[name] = val
-        pdb.set_trace()
         return
 
     def load_ccs_file(self) -> None:
