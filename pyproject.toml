@@ -1,7 +1,7 @@
 [project]
 name = "ccmodel"
 version = "0.1.1"
-description = ""
+description = "Clang-10 powered C/C++ code modeling"
 authors = [
     {name = "Gabe Ingram", email = "gabriel.ingram@colorado.edu"},
 ]
@@ -17,12 +17,19 @@ requires-python = ">=3.8"
 dynamic = ["classifiers"]
 license = {text = "MIT"}
 readme = "README.md"
-keywords = ["c", "cc", "c++", "cpp", "parse", "code", "model"]
+keywords = [
+    "c",
+    "cc",
+    "c++",
+    "cpp",
+    "parse",
+    "code",
+    "model"
+]
 
 [project.urls]
 homepage = "https://github.com/gjingram/ccmodel"
 repository = "https://github.com/gjingram/ccmodel"
-documentation = ""
 
 [project.scripts]
 ccm = "ccmodel.ccm:run_ccm"
