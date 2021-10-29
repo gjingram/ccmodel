@@ -64,5 +64,13 @@ ccmodel_log_config = {
     },
 }
 
-logger.configure(**ccmodel_log_config)
+if len(logger._core.handlers) == 0:
+    logger.configure(**ccmodel_log_config)
+else:
+    for hndlr in ccmodel_log_config["handlers"]:
+        logger.add(**hndlr)
+    logger._core.extra.update(ccmodel_log_config["extra"])
+
+if 0 in logger._core.handlers:
+    logger.remove(0)
 logger.disable("ccmodel")
