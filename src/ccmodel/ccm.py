@@ -1,8 +1,6 @@
 import argparse
 import os
 import sys
-import asyncio
-import copy
 import orjson as json
 import time
 from pathlib import Path
@@ -110,7 +108,7 @@ class CcmOpt(object):
         self.pretty = False
         self.include_paths = []
         self.recursion_level = -1
-        self.process_main_includes = None
+        self.process_main_includes = False
         self.clang_args = []
         return
 
@@ -301,6 +299,9 @@ def ccm_process() -> None:
     return
 
 def check_for_updates() -> None:
+    if not bool(len(ccm_opt.ccm_files)):
+        return
+
     print()
     remove_files = []
     for file_ in ccm_opt.ccm_files:
@@ -328,7 +329,7 @@ def check_for_updates() -> None:
                         )
                 remove_files.append(files)
     print()
-    ccm_files = [
+    ccm_opt.ccm_files = [
             file_ for file_ in ccm_opt.ccm_files if
             file_ not in remove_files
             ]
@@ -413,15 +414,15 @@ def main() -> None:
         include_stage = True
         set_main_include_paths()
         main()
+    print("\n")
+    ccmodel_config.logger.bind(stage_log=True, color="green")\
+            .opt(colors=True)\
+            .info("CCModel parsing complete!\n")
     return
 
 def run_ccm() -> None:
     handle_command_line()
     main()
-    print("\n")
-    ccmodel_config.logger.bind(stage_log=True, color="green")\
-            .opt(colors=True)\
-            .info("CCModel parsing complete!\n")
     return
 
 if __name__ == "__main__":
