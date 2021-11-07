@@ -182,8 +182,6 @@ class Name(Variant):
         return
 
     def write_qual_name(self) -> str:
-        if self.qual_name is None:
-            pdb.set_trace()
         return "::".join(reversed(self.qual_name)).lstrip()
 
     def write_name(self) -> str:

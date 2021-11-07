@@ -25,6 +25,7 @@ from ccmodel.__config__ import (
 )
 import ccm_clang_tools.clang_parse as cp
 import ccm_clang_tools.utils as ctu
+import pdb
 
 ccm_cl = argparse.ArgumentParser(
         description="CCModel Command Line Interface"
@@ -301,12 +302,10 @@ def ccm_process() -> None:
 def check_for_updates() -> None:
     if not bool(len(ccm_opt.ccm_files)):
         return
-
-    print()
     remove_files = []
     for file_ in ccm_opt.ccm_files:
         basename = os.path.basename(file_)
-        ccs_filename = basename.split(".")[0]
+        ccs_filename = basename.split(".")[0] + ".ccs"
         
         ccs_path = os.path.join(
                 ccm_opt.out_dir,
@@ -316,19 +315,19 @@ def check_for_updates() -> None:
         if os.path.exists(ccs_path):
             with open(ccs_path, "rb") as ccs_file:
                 data = json.loads(ccs_file.read())
-            src_mtime = os.path.getmtime(files[0])
+            src_mtime = os.path.getmtime(file_)
             data_mtime = data["m_time"]
             if src_mtime == data_mtime:
-                if force:
+                rel_file = os.path.relpath(file_)
+                if ccm_opt.force:
                     ccmodel_config.logger.bind(stage_log=True).info(
-                            f"Force update {files[1]}\n"
+                            f"Force update {rel_file}\n"
                             )
                     continue
                 ccmodel_config.logger.bind(stage_log=True).info(
-                        f"{files[1]} up-to-date\n"
+                        f"{rel_file} up-to-date\n"
                         )
-                remove_files.append(files)
-    print()
+                remove_files.append(file_)
     ccm_opt.ccm_files = [
             file_ for file_ in ccm_opt.ccm_files if
             file_ not in remove_files

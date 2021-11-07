@@ -44,7 +44,16 @@ def _find_tool():
             source_exists
             )
 
-    docker_exists = check_docker_exists(raise_=False)
+    try:
+        docker_exists = check_docker_exists(raise_=False)
+    except:
+        ccm_config.logger.bind(stage_log=True, color="orange").opt(colors=True)\
+                .warn(
+                "Docker check failed, but \"docker\" is on the path.\n" +
+                "The docker engine might not be fully initialized."
+                )
+        docker_exists = False
+                
     image_exists = False
     if docker_exists:
         image_exists = check_image_exists(raise_=False) is not None

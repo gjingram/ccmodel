@@ -65,15 +65,15 @@ class CcsReader(object):
             ccmodel_config.logger.bind(stage_log=True, color="red").error(
                     f"Requested state file: {ccs_file} is non-unique." +
                     "\n" +
-                    f"Please be more specific."
+                    f"Please be more specific.\n"
                     )
             sys.exit(-1)
         elif len(out) < 1:
             if must_find:
-                ccmodel.config.logger.bind(stage_log=True, color="red").error(
+                ccmodel_config.logger.bind(stage_log=True, color="red").error(
                         f"Requested state file: {ccs_file} cannot be found in" +
                         "\n" +
-                        f"the provided database."
+                        f"the provided database.\n"
                         )
                 sys.exit(-1)
             else:
@@ -107,9 +107,9 @@ class CcsReader(object):
                     inc_file_dir,
                     inc_file_base) + ".ccs"
             self.read(inc_path, must_find=False)
-        pdb.set_trace()
         main_header.extract_translation_unit()
         main_header.merge_includes(self._headers_loaded)
         main_header.resolve_pointers()
         main_header.build_translation_unit_id_map()
+        clear_pointers()
         return main_header

@@ -14,8 +14,13 @@ from ccmodel.utils.code_utils import (
         form_id,
         get_bracketed_list_items
         )
-from typing import Optional
+from typing import (
+        Union,
+        List,
+        Optional
+        )
 import copy
+import pdb
 
 ################################# attrs #######################################
 
@@ -1016,6 +1021,45 @@ class DeclContext(SkippableVariant, IdContainer):
         self.n_anonymous_namespaces = 0
         self.n_anonymous_unions = 0
         return
+
+    def _get_decl_kind(self, decl_kind) -> List[Union[Decl, "DeclContext"]]:
+        out = []
+        for decl in self.declarations:
+            if isinstance(decl, decl_kind):
+                out.append(decl)
+        return decl
+
+    @property
+    def classes(self) -> List["RecordDecl"]:
+        return self._get_decl_kind(RecordDecl)
+
+    @property
+    def linkage_specs(self) -> List["LinkageSpecDecl"]:
+        return self._get_decl_kind(LinkageSpecDecl)
+
+    @property
+    def namespaces(self) -> List["NamespaceDecl"]:
+        return self._get_decl_kind(NamespaceDecl)
+
+    @property
+    def functions(self) -> List["FunctionDecl"]:
+        return self._get_decl_kind(FunctionDecl)
+
+    @property
+    def variables(self) -> List["VarDecl"]:
+        return self._get_decl_kind(VarDecl)
+
+    @property
+    def typedefs(self) -> List["TypedefDecl"]:
+        return self._get_decl_kind(TypedefDecl)
+
+    @property
+    def enumerations(self) -> List["EnumDecl"]:
+        return self._get_decl_kind(EnumDecl)
+
+    @property
+    def enum_constants(self) -> List["EnumConstantDecl"]:
+        return self._get_decl_kind(EnumConstantDecl)
 
     def load_content(self, obj: dict) -> dict:
         if SkippableVariant.load_content(self, obj):
