@@ -1027,7 +1027,7 @@ class DeclContext(SkippableVariant, IdContainer):
         for decl in self.declarations:
             if isinstance(decl, decl_kind):
                 out.append(decl)
-        return decl
+        return out
 
     @property
     def classes(self) -> List["RecordDecl"]:
