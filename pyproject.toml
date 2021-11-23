@@ -10,7 +10,7 @@ dependencies = [
     "graphlib-backport~=1.0",
     "regex~=2021.10",
     "orjson~=3.6",
-    "ccm-clang-tools~=0.1",
+    "-e ../clang_tools",
     "docker~=5.0",
 ]
 requires-python = ">=3.8"
