@@ -457,6 +457,8 @@ class TagType(Type):
     def __init__(self):
         super().__init__()
         self.decl = -1
+
+        self._resolving = False
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -467,9 +469,18 @@ class TagType(Type):
     def resolve_type(self) -> str:
         if self.decl.skipped:
             return "::".join(reversed(self.decl.id.qual_name))
-        return (
-                self.decl.type.resolve_type()
-                )
+        type_out = self
+        if not self._resolving:
+            self._resolving = True
+            type_out = self.decl.type.resolve_type()
+            self._resolving = False
+        return type_out
+
+    def get_id(self) -> str:
+        return self.decl.get_id()
+
+    def get_qualified_id(self) -> str:
+        return self.decl.get_qualified_id()
 
 
 class TypedefType(Type):
@@ -489,6 +500,7 @@ class TypedefType(Type):
         return obj
 
     def resolve_type(self) -> str:
+        pdb.set_trace()
         if self.decl.skipped:
             return "::".join(reversed(self.decl.id.qual_name))
 
@@ -850,7 +862,7 @@ class Decl(SkippableVariant):
         self.is_invalid_decl = False
         self.attributes = []
         self.full_comment = None
-        self.access_spec = None
+        self.access_specifier = None
         return
 
     def load_content(self, obj: dict) -> None:
@@ -876,6 +888,7 @@ class Decl(SkippableVariant):
                 obj["full_comment"],
                 parent=self
                 )
+        self.access_specifier = obj["access_specifier"]
         return
 
 
@@ -1216,6 +1229,8 @@ class TypedefDecl(TypeDecl, IdContainer):
         super().__init__()
         self.underlying_type = None
         self.is_module_private = False
+        self.is_struct = False
+        self.struct = None
         pointers.typedefs.append(self)
         return
 
@@ -1245,6 +1260,8 @@ class TypedefDecl(TypeDecl, IdContainer):
                     IdContainer
                     )
             ):
+            self.is_struct = True
+            self.struct = self.underlying_type.type_object.desugared_type.decl
             self._identifier_map = copy.deepcopy(
                     self.underlying_type.type_object.desugared_type
                     .decl._identifier_map
@@ -1268,12 +1285,16 @@ class EnumDecl(TagDecl):
         super().__init__()
         self.scope = ""
         self.is_module_private = False
+        self.int_type = None
         return
 
     def load_content(self, obj: dict) -> dict:
         TagDecl.load_content(self, obj["tag_decl"])
         self.scope = obj["scope"]
         self.is_module_private = obj["is_module_private"]
+        self.int_type = QualType.load_json(obj[
+            "int_type"
+            ])
         return obj
 
     def set_ccm_identifier(self) -> None:
@@ -1381,11 +1402,14 @@ class FunctionDecl(ValueDecl, IdContainer):
         self.decl_ptr_with_body = None
         self.body = None
         self.template_specialization = None
+        self.param_types_tuple = None
+        self.is_template = False
         return
 
     def load_content(self, obj: dict) -> dict:
         ValueDecl.load_content(self, obj["value_decl"])
         self.mangled_name = obj["mangled_name"]
+        self.return_type = QualType.load_json(obj["return_type"])
         self.is_ccp = obj["is_cpp"]
         self.is_inline = obj["is_inline"]
         self.is_module_private = obj["is_module_private"]
@@ -1401,6 +1425,9 @@ class FunctionDecl(ValueDecl, IdContainer):
                     parent=self) for
                 x in obj["parameters"]
                 ]
+        self.param_types_tuple = tuple(
+                [x.type for x in self.parameters]
+                )
         for param in [x for x in self.parameters if x is not None]:
             self._named_decls.append(param)
 
@@ -1678,6 +1705,7 @@ class CXXRecordDecl(RecordDecl):
         self.is_class = False
         self.is_union = False
         self.is_enum = False
+        self.is_template = False
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -1710,6 +1738,18 @@ class CXXRecordDecl(RecordDecl):
         self.is_enum = obj["is_enum"]
         return obj
 
+    @property
+    def ctors(self) -> List["CXXConstructorDecl"]:
+        return self._get_decl_kind(CXXConstructorDecl)
+
+    @property
+    def methods(self) -> List["CXXMethodDecl"]:
+        return [func for func in self.functions if func not in self.ctors]
+
+    @property
+    def members(self) -> List["FieldDecl"]:
+        return self._get_decl_kind(FieldDecl)
+
     def set_ccm_identifier(self) -> None:
         if self._ccm_identifier != "":
             return
@@ -1722,6 +1762,12 @@ class CXXRecordDecl(RecordDecl):
                     self.get_qualified_id()
                     )
         NamedDecl.set_ccm_identifier(self)
+        return
+
+    def replace_pointers(self) -> None:
+        Variant.replace_pointers(self)
+        for icls in self.bases:
+            icls.replace_pointers()
         return
 
 
@@ -1771,6 +1817,7 @@ class ClassTemplateSpecializationDecl(CXXRecordDecl, TemplateSpecialization):
     def __init__(self):
         super().__init__()
         self.mangled_name = ""
+        self.is_template = True
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -1942,6 +1989,7 @@ class ClassTemplateDecl(CXXRecordDecl):
         self.parameters = []
         self.specializations = []
         self.partial_specializations = []
+        self.is_template = True
         return
 
     def load_content(self, obj: dict) -> dict:
@@ -1999,6 +2047,7 @@ class FunctionTemplateDecl(FunctionDecl):
         self.template_decl = None
         self.template_parameters = []
         self.specializations = []
+        self.is_template = True
         return
 
     def load_content(self, obj: dict) -> dict:
